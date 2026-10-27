@@ -289,3 +289,78 @@ export const getCategories = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to fetch categories' });
   }
 };
+
+export const adjustStock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { storeId, quantityChange, notes } = req.body;
+
+    if (!storeId || quantityChange === undefined) {
+      return res.status(400).json({ success: false, message: 'Store outlet and quantity are required' });
+    }
+
+    const change = Number(quantityChange);
+    if (isNaN(change)) {
+      return res.status(400).json({ success: false, message: 'Invalid quantity number' });
+    }
+
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const existingBal = await tx.stockBalance.findUnique({
+        where: { productId_storeId: { productId: id, storeId } },
+      });
+
+      const currentQty = existingBal ? existingBal.quantity : 0;
+      const newQty = Math.max(0, currentQty + change);
+
+      await tx.stockBalance.upsert({
+        where: { productId_storeId: { productId: id, storeId } },
+        update: { quantity: newQty },
+        create: { productId: id, storeId, quantity: newQty },
+      });
+
+      // Recalculate total product stock
+      const allBalances = await tx.stockBalance.findMany({
+        where: { productId: id },
+      });
+      const newTotal = allBalances.reduce((sum, b) => sum + (b.storeId === storeId ? newQty : b.quantity), 0);
+
+      const updatedProd = await tx.product.update({
+        where: { id },
+        data: { stockQuantity: newTotal },
+        include: {
+          category: true,
+          stockBalances: { include: { store: { include: { city: true } } } },
+        },
+      });
+
+      // Log inventory movement
+      await tx.stockMovement.create({
+        data: {
+          productId: id,
+          storeId,
+          quantityChange: change,
+          type: change >= 0 ? 'PURCHASE_RECEIPT' : 'ADJUSTMENT',
+          notes: notes || 'Direct inventory stock-in / adjustment',
+          createdById: req.user?.id || null,
+        },
+      });
+
+      return updatedProd;
+    });
+
+    return res.json({
+      success: true,
+      message: `Stock successfully updated (${change >= 0 ? '+' : ''}${change} units)`,
+      data: updated,
+    });
+  } catch (error) {
+    console.error('adjustStock error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to adjust stock: ' + error.message });
+  }
+};
+

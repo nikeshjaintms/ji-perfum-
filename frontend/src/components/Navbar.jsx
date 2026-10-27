@@ -9,7 +9,8 @@ import {
   LogOut,
   RefreshCw,
   MapPin,
-  ChevronDown
+  ChevronDown,
+  Plus
 } from 'lucide-react';
 
 export default function Navbar({
@@ -21,6 +22,7 @@ export default function Navbar({
   stores = [],
   selectedStore,
   onSelectStore,
+  onOpenAddOutlet,
 }) {
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
 
@@ -102,7 +104,7 @@ export default function Navbar({
 
             {/* MULTI-CITY STORE SWITCHER */}
             {stores.length > 0 && (
-              <div className="relative flex items-center">
+              <div className="relative flex items-center space-x-1.5">
                 <div className="bg-slate-100/90 hover:bg-slate-200/80 border border-slate-200 hover:border-slate-300 rounded-xl px-3 py-1.5 flex items-center space-x-2 text-xs transition">
                   <span className="w-2 h-2 rounded-full bg-amber-500 shadow-sm shadow-amber-500/50"></span>
                   <div className="flex flex-col">
@@ -125,6 +127,15 @@ export default function Navbar({
                     </select>
                   </div>
                 </div>
+
+                <button
+                  onClick={onOpenAddOutlet}
+                  id="add-outlet-city-btn"
+                  title="Add New City or Boutique Outlet"
+                  className="p-2 bg-slate-100/90 hover:bg-amber-100 border border-slate-200 hover:border-amber-300 rounded-xl text-amber-700 transition cursor-pointer flex items-center justify-center shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
 

@@ -62,6 +62,14 @@ export const storeService = {
     const res = await api.get(`/stores/${id}`);
     return res.data;
   },
+  createCity: async (cityData) => {
+    const res = await api.post('/stores/cities', cityData);
+    return res.data;
+  },
+  createStore: async (storeData) => {
+    const res = await api.post('/stores', storeData);
+    return res.data;
+  },
 };
 
 export const productService = {
@@ -85,6 +93,10 @@ export const productService = {
   },
   updateProduct: async (id, productData) => {
     const res = await api.put(`/products/${id}`, productData);
+    return res.data;
+  },
+  adjustStock: async (id, payload) => {
+    const res = await api.post(`/products/${id}/adjust-stock`, payload);
     return res.data;
   },
 };

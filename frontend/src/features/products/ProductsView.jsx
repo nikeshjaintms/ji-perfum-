@@ -46,6 +46,60 @@ export default function ProductsView({ stores: propStores = [] }) {
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Quick Stock In State
+  const [isStockInModalOpen, setIsStockInModalOpen] = useState(false);
+  const [stockInProduct, setStockInProduct] = useState(null);
+  const [stockInStoreId, setStockInStoreId] = useState('');
+  const [stockInQty, setStockInQty] = useState(25);
+  const [stockInNotes, setStockInNotes] = useState('Stock receipt from distillery / warehouse');
+  const [stockInSubmitting, setStockInSubmitting] = useState(false);
+  const [stockInSuccess, setStockInSuccess] = useState('');
+  const [stockInError, setStockInError] = useState('');
+
+  const handleOpenQuickStockIn = (product = null) => {
+    const prod = product || products[0];
+    setStockInProduct(prod);
+    setStockInStoreId(stores[0]?.id || '');
+    setStockInQty(25);
+    setStockInNotes('Stock receipt from distillery / warehouse');
+    setStockInSuccess('');
+    setStockInError('');
+    setIsStockInModalOpen(true);
+  };
+
+  const handleStockInSubmit = async (e) => {
+    e.preventDefault();
+    if (!stockInProduct || !stockInStoreId || !stockInQty) {
+      setStockInError('Please select a product, outlet, and valid quantity.');
+      return;
+    }
+
+    try {
+      setStockInSubmitting(true);
+      setStockInError('');
+      setStockInSuccess('');
+
+      const res = await productService.adjustStock(stockInProduct.id, {
+        storeId: stockInStoreId,
+        quantityChange: Number(stockInQty),
+        notes: stockInNotes.trim(),
+      });
+
+      if (res.success) {
+        setStockInSuccess(`Successfully added +${stockInQty} units!`);
+        await loadProducts();
+        setTimeout(() => {
+          setIsStockInModalOpen(false);
+          setStockInSuccess('');
+        }, 1200);
+      }
+    } catch (err) {
+      setStockInError(err.response?.data?.message || 'Failed to update inventory stock.');
+    } finally {
+      setStockInSubmitting(false);
+    }
+  };
+
   // Always ensure stores are loaded
   useEffect(() => {
     if (!stores.length) {
@@ -189,10 +243,20 @@ export default function ProductsView({ stores: propStores = [] }) {
             />
           </form>
 
+          {/* Quick Stock In Button */}
+          <button
+            onClick={() => handleOpenQuickStockIn()}
+            id="quick-stock-in-btn"
+            className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full text-xs font-semibold tracking-wide transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer shadow-xs"
+          >
+            <Plus className="w-3.5 h-3.5 text-emerald-700" />
+            <span>+ Add Stock In</span>
+          </button>
+
           {/* Add Product Button */}
           <button
             onClick={handleOpenAddModal}
-            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 rounded-full text-xs font-semibold tracking-wide transition shadow-md shadow-amber-500/20 flex items-center space-x-1.5 whitespace-nowrap"
+            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 rounded-full text-xs font-semibold tracking-wide transition shadow-md shadow-amber-500/20 flex items-center space-x-1.5 whitespace-nowrap cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Fragrance SKU</span>
@@ -341,15 +405,26 @@ export default function ProductsView({ stores: propStores = [] }) {
                         </span>
                       </td>
 
-                      {/* Edit Button */}
+                      {/* Actions */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        <button
-                          onClick={() => handleOpenEditModal(prod)}
-                          className="p-1.5 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition"
-                          title="Edit Fragrance & City Stock"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-center space-x-1.5">
+                          <button
+                            onClick={() => handleOpenQuickStockIn(prod)}
+                            className="px-2.5 py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition flex items-center space-x-1 cursor-pointer"
+                            title="Add / Receive Stock In"
+                          >
+                            <Plus className="w-3 h-3 text-emerald-700" />
+                            <span>Stock In</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleOpenEditModal(prod)}
+                            className="p-1.5 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
+                            title="Edit Fragrance & City Stock"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
 
                     </tr>
@@ -562,6 +637,155 @@ export default function ProductsView({ stores: propStores = [] }) {
                 </button>
               </div>
 
+            </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* Quick Stock In / Inventory Receipt Modal */}
+      {isStockInModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl text-slate-900 relative">
+            
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-700">
+                  <Package className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-700 font-semibold block">
+                    Inventory Stock-In
+                  </span>
+                  <h3 className="text-base font-serif font-bold text-slate-900">
+                    Add Units to Boutique
+                  </h3>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsStockInModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Alert messages */}
+            {stockInError && (
+              <div className="mt-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>{stockInError}</span>
+              </div>
+            )}
+            {stockInSuccess && (
+              <div className="mt-3 p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                <span>{stockInSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleStockInSubmit} className="mt-4 space-y-3.5">
+              {/* Product Selection */}
+              <div>
+                <label className="text-xs font-medium text-slate-700 block mb-1">Fragrance Product *</label>
+                <select
+                  value={stockInProduct?.id || ''}
+                  onChange={(e) => {
+                    const p = products.find((prod) => prod.id === e.target.value);
+                    if (p) setStockInProduct(p);
+                  }}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 focus:outline-none cursor-pointer"
+                >
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.sku}) — Total: {p.stockQuantity}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Destination Outlet */}
+              <div>
+                <label className="text-xs font-medium text-slate-700 block mb-1">Destination Boutique / City *</label>
+                <select
+                  value={stockInStoreId}
+                  onChange={(e) => setStockInStoreId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 focus:outline-none cursor-pointer"
+                >
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.city?.name} — {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quantity to Add & Quick Preset Pills */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-slate-700">Quantity to Add (Units) *</label>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    Current: {stockInProduct?.stockBalances?.find((b) => b.storeId === stockInStoreId)?.quantity || 0} units
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={stockInQty}
+                  onChange={(e) => setStockInQty(Math.max(1, parseInt(e.target.value) || 0))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-sm font-bold font-mono text-slate-900 focus:outline-none"
+                />
+
+                {/* Quick Add Pills */}
+                <div className="flex gap-1.5 mt-2">
+                  {[5, 10, 25, 50, 100].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setStockInQty(preset)}
+                      className={`flex-1 py-1 text-[11px] font-mono rounded-lg border transition cursor-pointer ${
+                        stockInQty === preset
+                          ? 'bg-amber-500 text-slate-950 border-amber-500 font-bold'
+                          : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                      }`}
+                    >
+                      +{preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notes / Reason */}
+              <div>
+                <label className="text-xs font-medium text-slate-700 block mb-1">Receipt Note / Batch</label>
+                <input
+                  type="text"
+                  value={stockInNotes}
+                  onChange={(e) => setStockInNotes(e.target.value)}
+                  placeholder="e.g. New consignment batch #2026-B"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsStockInModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-medium transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={stockInSubmitting}
+                  className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 text-white rounded-full text-xs font-semibold tracking-wide transition shadow-sm flex items-center space-x-1.5 cursor-pointer"
+                >
+                  {stockInSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{stockInSubmitting ? 'Updating Stock...' : 'Confirm Stock In'}</span>
+                </button>
+              </div>
             </form>
 
           </div>

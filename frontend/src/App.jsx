@@ -7,6 +7,7 @@ import InvoicePrintModal from './features/invoices/InvoicePrintModal';
 import ProductsView from './features/products/ProductsView';
 import UsersView from './features/users/UsersView';
 import LoginModal from './features/auth/LoginModal';
+import AddOutletModal from './components/AddOutletModal';
 import { authService, storeService } from './services/api';
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('pos'); // 'pos' | 'invoices' | 'products' | 'users'
   const [activeQrInvoice, setActiveQrInvoice] = useState(null);
   const [activePrintDoc, setActivePrintDoc] = useState(null); // { invoice, mode: 'a4' | 'thermal' }
+  const [isAddOutletOpen, setIsAddOutletOpen] = useState(false);
 
   const [isInitializing, setIsInitializing] = useState(true);
 
@@ -92,6 +94,20 @@ export default function App() {
     }
   };
 
+  const refreshStores = async (newStore = null) => {
+    try {
+      const res = await storeService.getStores();
+      if (res.success && res.data) {
+        setStores(res.data);
+        if (newStore) {
+          setSelectedStore(newStore);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to refresh stores:', err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-slate-900 flex flex-col font-sans selection:bg-amber-500/20 selection:text-amber-900">
       
@@ -105,6 +121,7 @@ export default function App() {
         stores={stores}
         selectedStore={selectedStore}
         onSelectStore={(st) => setSelectedStore(st)}
+        onOpenAddOutlet={() => setIsAddOutletOpen(true)}
       />
 
       {/* Main ERP Workspaces */}
@@ -187,6 +204,16 @@ export default function App() {
       {/* Login Modal when no user is signed in */}
       {!currentUser && (
         <LoginModal onLoginSuccess={(user) => setCurrentUser(user)} />
+      )}
+
+      {/* Add City & Outlet Modal */}
+      {isAddOutletOpen && (
+        <AddOutletModal
+          onClose={() => setIsAddOutletOpen(false)}
+          onStoreCreated={(newStore) => {
+            refreshStores(newStore);
+          }}
+        />
       )}
 
     </div>
