@@ -259,7 +259,7 @@ export default function InvoicePrintModal({ invoice, mode = 'a4', onClose }) {
                       <h1 className="text-base font-bold tracking-wider uppercase text-blue-900 font-serif">
                         {storeName}
                       </h1>
-                      <p className="text-[10px] text-gray-600">Luxury Fragrances & Attars</p>
+                      <p className="text-[10px] text-gray-600">Perfumes & Attars</p>
                       <p className="text-[10px] text-gray-600">{storeAddress}</p>
                     </div>
                   </div>

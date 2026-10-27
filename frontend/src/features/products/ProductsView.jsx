@@ -162,18 +162,8 @@ export default function ProductsView({ stores: propStores = [] }) {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
-          <div className="flex items-center space-x-2 text-[10px] uppercase tracking-[0.2em] text-amber-700 font-semibold mb-1">
-            <span>Inventory Architecture</span>
-            <span>•</span>
-            <span>Multi-Boutique Ledger</span>
-          </div>
-          <h2 className="text-2xl font-serif text-slate-900 tracking-tight flex items-center space-x-2.5">
-            <span className="w-1.5 h-5 bg-gradient-to-b from-amber-500 to-amber-700 rounded-full inline-block" />
-            <span>Fragrance Vault & Stock Balances</span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-1 max-w-2xl font-light">
-            Real-time multi-city balance ledger across Mandvi, Mumbai, Delhi, and Bengaluru boutiques.
-          </p>
+          <h2 className="text-2xl font-serif font-semibold text-slate-900">Products</h2>
+          <p className="text-sm text-slate-500 mt-1 max-w-2xl">What is on the shelf in each city, and what it sells for.</p>
         </div>
 
         <div className="flex items-center space-x-2.5 w-full sm:w-auto">
@@ -192,25 +182,25 @@ export default function ProductsView({ stores: propStores = [] }) {
           {/* Add Product Button */}
           <button
             onClick={handleOpenAddModal}
-            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 rounded-full text-xs font-semibold tracking-wide transition shadow-md shadow-amber-500/20 flex items-center space-x-1.5 whitespace-nowrap"
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center space-x-1.5 whitespace-nowrap"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add Fragrance SKU</span>
+            <span>Add product</span>
           </button>
         </div>
       </div>
 
       {/* Categories Filter Tabs */}
-      <div className="flex items-center space-x-2 mb-4 overflow-x-auto pb-1 scrollbar-none">
+      <div className="flex items-center gap-5 mb-4 overflow-x-auto border-b border-slate-200">
         <button
           onClick={() => setSelectedCategory('ALL')}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium tracking-wide whitespace-nowrap transition-all duration-150 ${
-            selectedCategory === 'ALL'
-              ? 'bg-amber-500 text-slate-950 border border-amber-500 shadow-sm font-semibold'
-              : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200 hover:border-slate-300 shadow-sm'
-          }`}
+          className={`pb-2 text-sm whitespace-nowrap border-b-2 -mb-px ${
+ selectedCategory === 'ALL'
+ ? 'border-amber-500 text-slate-900 font-semibold'
+ : 'border-transparent text-slate-500 hover:text-slate-900'
+ }`}
         >
-          All Fragrances
+          All
         </button>
         {categories.map((cat) => {
           const isActive = selectedCategory === cat.id;
@@ -218,11 +208,11 @@ export default function ProductsView({ stores: propStores = [] }) {
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium tracking-wide whitespace-nowrap transition-all duration-150 ${
-                isActive
-                  ? 'bg-amber-500 text-slate-950 border border-amber-500 shadow-sm font-semibold'
-                  : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200 hover:border-slate-300 shadow-sm'
-              }`}
+              className={`pb-2 text-sm whitespace-nowrap border-b-2 -mb-px ${
+ isActive
+ ? 'border-amber-500 text-slate-900 font-semibold'
+ : 'border-transparent text-slate-500 hover:text-slate-900'
+ }`}
             >
               {cat.name} ({cat._count?.products || 0})
             </button>
@@ -231,17 +221,17 @@ export default function ProductsView({ stores: propStores = [] }) {
       </div>
 
       {/* Products Table with City Stock Columns */}
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm backdrop-blur-xl">
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm ">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-200 text-[10px] tracking-[0.16em] uppercase text-slate-500 bg-slate-50/80 font-semibold">
-                <th className="py-3.5 px-4 font-normal">Fragrance Creation</th>
-                <th className="py-3.5 px-4 font-normal">SKU / Barcode</th>
-                <th className="py-3.5 px-4 font-normal">Collection</th>
-                <th className="py-3.5 px-4 text-right font-normal">M.R.P.</th>
-                <th className="py-3.5 px-4 font-normal">City Stock Allocation</th>
-                <th className="py-3.5 px-4 text-center font-normal">Network Total</th>
+              <tr className="border-b border-slate-200 text-[11px] text-slate-500 bg-slate-50/80 font-semibold">
+                <th className="py-3.5 px-4 font-normal">Fragrance</th>
+                <th className="py-3.5 px-4 font-normal">SKU and barcode</th>
+                <th className="py-3.5 px-4 font-normal">Category</th>
+                <th className="py-3.5 px-4 text-right font-normal">Price</th>
+                <th className="py-3.5 px-4 font-normal">Stock by city</th>
+                <th className="py-3.5 px-4 text-center font-normal">Total stock</th>
                 <th className="py-3.5 px-4 text-center font-normal">Actions</th>
               </tr>
             </thead>
@@ -250,7 +240,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                 <tr>
                   <td colSpan="7" className="py-16 text-center text-slate-500">
                     <RefreshCw className="w-5 h-5 text-amber-500 animate-spin mx-auto mb-2.5 opacity-80" />
-                    <span className="text-xs tracking-wider uppercase text-slate-500 font-light">Loading vault catalog...</span>
+                    <span className="text-xs text-slate-500 font-light">Loading vault catalog...</span>
                   </td>
                 </tr>
               ) : products.length === 0 ? (
@@ -268,24 +258,24 @@ export default function ProductsView({ stores: propStores = [] }) {
                       {/* Name & Notes */}
                       <td className="py-3.5 px-4">
                         <div className="font-serif font-medium text-slate-900 text-sm">{prod.name}</div>
-                        <div className="text-[10px] text-amber-700 uppercase font-medium tracking-wider mt-0.5">
+                        <div className="text-[11px] text-amber-700 font-medium mt-0.5">
                           {prod.concentration?.replace(/_/g, ' ')} • {prod.volumeMl}ml
                         </div>
                         {prod.fragranceNotes && (
-                          <div className="text-[10px] text-slate-500 font-light italic mt-0.5 truncate max-w-xs">
+                          <div className="text-[11px] text-slate-500 font-light italic mt-0.5 truncate max-w-xs">
                             {prod.fragranceNotes}
                           </div>
                         )}
                       </td>
 
                       {/* SKU & Barcode */}
-                      <td className="py-3.5 px-4 font-mono">
+                      <td className="py-3.5 px-4 tabular-nums">
                         <div className="text-slate-900 font-medium flex items-center space-x-1.5">
                           <Tag className="w-3 h-3 text-amber-600" />
                           <span>{prod.sku}</span>
                         </div>
                         {prod.barcode && (
-                          <div className="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5 font-light">
+                          <div className="text-[11px] text-slate-400 flex items-center space-x-1 mt-0.5 font-light">
                             <Barcode className="w-3 h-3 text-slate-400" />
                             <span>{prod.barcode}</span>
                           </div>
@@ -294,13 +284,13 @@ export default function ProductsView({ stores: propStores = [] }) {
 
                       {/* Category */}
                       <td className="py-3.5 px-4">
-                        <span className="inline-block px-2.5 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-slate-700 text-[10px] font-medium tracking-wide">
+                        <span className="inline-block px-2.5 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-slate-700 text-[11px] font-medium ">
                           {prod.category?.name || 'Fragrance'}
                         </span>
                       </td>
 
                       {/* Selling Price */}
-                      <td className="py-3.5 px-4 text-right font-mono font-semibold text-slate-900 text-sm whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right tabular-nums font-semibold text-slate-900 text-sm whitespace-nowrap">
                         ₹{Number(prod.sellingPrice).toFixed(2)}
                       </td>
 
@@ -314,13 +304,13 @@ export default function ProductsView({ stores: propStores = [] }) {
                               return (
                                 <span 
                                   key={bal.id || bal.storeId}
-                                  className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono border ${
-                                    q <= 0 
-                                      ? 'bg-rose-50 text-rose-700 border-rose-200' 
-                                      : q <= 5 
-                                      ? 'bg-amber-50 text-amber-800 border-amber-200' 
-                                      : 'bg-slate-100 text-slate-700 border-slate-200'
-                                  }`}
+                                  className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full text-[11px] tabular-nums border ${
+ q <= 0 
+ ? 'bg-rose-50 text-rose-700 border-rose-200' 
+ : q <= 5 
+ ? 'bg-amber-50 text-amber-800 border-amber-200' 
+ : 'bg-slate-100 text-slate-700 border-slate-200'
+ }`}
                                 >
                                   <span className="text-slate-400 font-light">{cityName}:</span>
                                   <span className="font-semibold text-slate-900">{q}</span>
@@ -328,16 +318,16 @@ export default function ProductsView({ stores: propStores = [] }) {
                               );
                             })
                           ) : (
-                            <span className="text-slate-400 text-[10px] font-light">No stock recorded</span>
+                            <span className="text-slate-400 text-[11px] font-light">No stock recorded</span>
                           )}
                         </div>
                       </td>
 
                       {/* Total Network Stock */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs tabular-nums font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                           <span>{prod.stockQuantity}</span>
-                          <span className="text-[10px] opacity-75 font-sans">units</span>
+                          <span className="text-[11px] opacity-75 font-sans">units</span>
                         </span>
                       </td>
 
@@ -363,18 +353,18 @@ export default function ProductsView({ stores: propStores = [] }) {
 
       {/* Add / Edit Product Modal with Multi-City Stock Inputs */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-          <div className="bg-white border border-slate-200 rounded-3xl max-w-2xl w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 ">
+          <div className="bg-white border border-slate-200 rounded-lg max-w-2xl w-full p-6 shadow-lg max-h-[90vh] overflow-y-auto text-slate-900">
             
             <div className="flex items-center justify-between pb-4 border-b border-slate-200">
               <div className="flex items-center space-x-3">
-                <div className="w-9 h-9 rounded-2xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-400/30 flex items-center justify-center">
                   <Package className="w-4 h-4 text-amber-600" />
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase tracking-[0.2em] text-amber-700 font-semibold block">Catalog Record</span>
-                  <h3 className="text-base font-serif text-slate-900 tracking-wide">
-                    {editingProduct ? 'Edit Fragrance Creation' : 'Add New Fragrance SKU'}
+                  <span className="text-[11px] text-amber-700 font-semibold block">Catalog Record</span>
+                  <h3 className="text-base font-serif text-slate-900 ">
+                    {editingProduct ? 'Edit Fragrance' : 'Add New Fragrance SKU'}
                   </h3>
                 </div>
               </div>
@@ -387,7 +377,7 @@ export default function ProductsView({ stores: propStores = [] }) {
             </div>
 
             {errorMsg && (
-              <div className="mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl">
+              <div className="mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-md">
                 {errorMsg}
               </div>
             )}
@@ -403,7 +393,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="e.g. JJ Royal Oud Extreme"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 focus:outline-none transition shadow-sm"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 focus:outline-none transition shadow-sm"
                   />
                 </div>
 
@@ -415,7 +405,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                     value={formData.sku}
                     onChange={(e) => setFormData({ ...formData, sku: e.target.value.toUpperCase() })}
                     placeholder="e.g. JJ-OUD-EXT"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 font-mono focus:outline-none transition shadow-sm"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm"
                   />
                 </div>
               </div>
@@ -428,7 +418,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                     value={formData.barcode}
                     onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
                     placeholder="e.g. 890123456008"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 font-mono focus:outline-none transition shadow-sm"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm"
                   />
                 </div>
 
@@ -437,7 +427,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                   <select
                     value={formData.categoryId}
                     onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 focus:outline-none cursor-pointer shadow-sm"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 focus:outline-none cursor-pointer shadow-sm"
                   >
                     {categories.map((cat) => (
                       <option key={cat.id} value={cat.id} className="bg-white text-slate-900">
@@ -452,7 +442,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                   <select
                     value={formData.concentration}
                     onChange={(e) => setFormData({ ...formData, concentration: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 focus:outline-none cursor-pointer shadow-sm"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 focus:outline-none cursor-pointer shadow-sm"
                   >
                     <option value="EXTRAIT_DE_PARFUM" className="bg-white text-slate-900">Extrait De Parfum</option>
                     <option value="EAU_DE_PARFUM" className="bg-white text-slate-900">Eau De Parfum</option>
@@ -470,7 +460,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                     type="number"
                     value={formData.volumeMl}
                     onChange={(e) => setFormData({ ...formData, volumeMl: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 font-mono focus:outline-none transition shadow-sm"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm"
                   />
                 </div>
 
@@ -482,7 +472,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                     required
                     value={formData.purchaseCost}
                     onChange={(e) => setFormData({ ...formData, purchaseCost: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 font-mono focus:outline-none transition shadow-sm"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm"
                   />
                 </div>
 
@@ -494,7 +484,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                     required
                     value={formData.sellingPrice}
                     onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 font-mono focus:outline-none transition shadow-sm"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm"
                   />
                 </div>
               </div>
@@ -507,20 +497,20 @@ export default function ProductsView({ stores: propStores = [] }) {
                   value={formData.fragranceNotes}
                   onChange={(e) => setFormData({ ...formData, fragranceNotes: e.target.value })}
                   placeholder="e.g. Cambodian Oud, Turkish Rose, Amber, Saffron, Smoky Birch"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 focus:outline-none transition font-sans shadow-sm"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 focus:outline-none transition font-sans shadow-sm"
                 />
               </div>
 
               {/* Multi-City Initial Stock Allocation */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+              <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
                 <div className="text-xs font-medium text-slate-900 mb-2.5 flex items-center space-x-1.5">
                   <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                  <span>City-Wise Boutique Stock Allocation</span>
+                  <span>Stock by city</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {stores.map((st) => (
                     <div key={st.id}>
-                      <label className="text-[11px] text-slate-500 block mb-1 font-light truncate">
+                      <label className="text-xs text-slate-500 block mb-1 font-light truncate">
                         {st.city?.name}
                       </label>
                       <input
@@ -537,7 +527,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                             },
                           });
                         }}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 focus:border-amber-500 rounded-lg text-xs text-slate-900 font-mono focus:outline-none text-center shadow-sm"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 focus:border-amber-500 rounded-lg text-xs text-slate-900 tabular-nums focus:outline-none text-center shadow-sm"
                       />
                     </div>
                   ))}
@@ -555,7 +545,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                 <button
                   type="submit"
                   disabled={formSubmitting}
-                  className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 rounded-full text-xs font-semibold tracking-wide transition shadow-md shadow-amber-500/25 flex items-center space-x-1.5"
+                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center space-x-1.5"
                 >
                   {formSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   <span>{editingProduct ? 'Update Fragrance & Stock' : 'Save Fragrance SKU'}</span>

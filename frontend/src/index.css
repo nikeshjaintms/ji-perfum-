@@ -4,37 +4,39 @@
 
 @layer base {
   body {
-    @apply bg-[#F8F9FA] text-slate-900 font-sans selection:bg-amber-500/25 selection:text-amber-900;
-    background-color: #F8F9FA !important;
-    color: #0F172A !important;
+    @apply bg-paper text-slate-900 font-sans;
+    font-variant-numeric: tabular-nums;
+  }
+  :focus-visible {
+    outline: 2px solid #2F5D4E;
+    outline-offset: 2px;
   }
 }
 
-/* Luxury Glassmorphism & Custom Accents (Light Luxury Theme) */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
+/* Bill slip: the cart panel is drawn like the paper bill the shop hands over. */
+.bill-slip {
+  background: #fff;
+  box-shadow: 0 1px 0 rgba(35, 28, 37, 0.06), 0 12px 28px -18px rgba(35, 28, 37, 0.35);
+  border-radius: 6px 6px 0 0;
+  position: relative;
+}
+.bill-slip::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -7px;
+  height: 8px;
+  background:
+    linear-gradient(135deg, #fff 50%, transparent 50%) 0 0 / 12px 8px repeat-x,
+    linear-gradient(225deg, #fff 50%, transparent 50%) 0 0 / 12px 8px repeat-x;
+}
+.slip-rule {
+  border-top: 1px dashed #CBC7C3;
 }
 
-.glass-card {
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-}
-
-.luxury-gold-gradient {
-  background: linear-gradient(135deg, #F3E5AB 0%, #D4AF37 50%, #AA822A 100%);
-}
-
-.luxury-gold-text {
-  background: linear-gradient(135deg, #B48608 0%, #996515 50%, #744D0D 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
 /* Custom minimal scrollbar */
@@ -53,7 +55,7 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(212, 175, 55, 0.6);
+  background: rgba(47, 93, 78, 0.6);
 }
 
 /* Print Styles: Hide all ERP navigation and modals, show only the print container */

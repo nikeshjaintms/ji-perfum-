@@ -81,27 +81,24 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
   const isPartial = currentStatus === 'PARTIALLY_PAID' || creditAmount > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-      <div className="bg-white border border-slate-200 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 ">
+      <div className="bg-white border border-slate-200 rounded-lg max-w-lg w-full overflow-hidden shadow-lg relative">
         
         {/* Modal Header */}
         <div className="bg-slate-50/80 p-5 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className={`h-10 w-10 rounded-2xl border flex items-center justify-center ${
-              isCredit ? 'bg-rose-500/10 border-rose-500/30 text-rose-500' :
-              isSplit ? 'bg-amber-500/10 border-amber-500/30 text-amber-600' :
-              'bg-amber-500/10 border-amber-500/30 text-amber-600'
-            }`}>
+            <div className={`h-10 w-10 rounded-lg border flex items-center justify-center ${
+ isCredit ? 'bg-rose-500/10 border-rose-500/30 text-rose-500' :
+ isSplit ? 'bg-amber-500/10 border-amber-500/30 text-amber-600' :
+ 'bg-amber-500/10 border-amber-500/30 text-amber-600'
+ }`}>
               {isCredit ? <BookOpen className="w-4 h-4" /> : isSplit ? <Layers className="w-4 h-4" /> : <QrCode className="w-4 h-4" />}
             </div>
             <div>
-              <span className="text-[10px] uppercase tracking-[0.2em] text-amber-600 font-semibold block">
-                {isCredit ? 'Credit Due' : isSplit ? 'Multi-Tender' : 'Direct Checkout'}
-              </span>
-              <h3 className="text-base font-serif text-slate-900 tracking-wide">
-                {isCredit ? 'Customer Credit Ledger' : isSplit ? 'Split / Partial Settlement' : 'Dynamic UPI Payment'}
+              <h3 className="text-base font-serif text-slate-900 ">
+                {isCredit ? 'Credit bill' : isSplit ? 'Split payment' : 'UPI payment'}
               </h3>
-              <p className="text-xs text-slate-500 font-mono">
+              <p className="text-xs text-slate-500 tabular-nums">
                 Invoice #{invoiceData.invoiceNumber}
               </p>
             </div>
@@ -120,70 +117,70 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
           
           {/* Status Badge */}
           {isPaid ? (
-            <div className="w-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 py-2.5 px-4 rounded-full flex items-center justify-center space-x-2 text-xs font-medium">
+            <div className="w-full bg-emerald-500/10 border border-emerald-500/25 text-slate-600 py-2.5 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>Payment Verified & Confirmed in Full</span>
+              <span>Paid in full</span>
             </div>
           ) : isPartial ? (
-            <div className="w-full bg-amber-500/10 border border-amber-500/25 text-amber-700 py-2 px-4 rounded-full flex items-center justify-center space-x-2 text-xs font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              <span>Partial Payment Recorded • Khata Balance: ₹{creditAmount.toFixed(2)}</span>
+            <div className="w-full bg-amber-500/10 border border-amber-500/25 text-amber-700 py-2 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600" />
+              <span>Part paid. Still due: ₹{creditAmount.toFixed(2)}</span>
             </div>
           ) : (
-            <div className="w-full bg-slate-100 border border-slate-200 text-slate-600 py-2 px-4 rounded-full flex items-center justify-center space-x-2 text-xs font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              <span>Awaiting Customer UPI Scan or Counter Settlement</span>
+            <div className="w-full bg-slate-100 border border-slate-200 text-slate-600 py-2 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600" />
+              <span>Waiting for the customer to pay</span>
             </div>
           )}
 
           {/* Split Tender Breakdown Box (if Split or Credit) */}
           {(isSplit || isCredit) && (
-            <div className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-left space-y-1.5 text-xs">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-amber-600 font-semibold flex items-center space-x-1.5 mb-1">
+            <div className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-left space-y-1.5 text-xs">
+              <div className="text-[11px] text-amber-600 font-semibold flex items-center space-x-1.5 mb-1">
                 <Layers className="w-3 h-3" />
-                <span>Tender Allocation Breakdown</span>
+                <span>How this bill is paid</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                 {cashAmount > 0 && (
-                  <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl">
-                    <span className="text-[10px] text-emerald-600 flex items-center justify-center space-x-1">
+                  <div className="p-2 bg-white border border-slate-200 rounded-md">
+                    <span className="text-[11px] text-slate-600 flex items-center justify-center space-x-1">
                       <Banknote className="w-3 h-3" />
-                      <span>Cash Paid</span>
+                      <span>Cash</span>
                     </span>
-                    <span className="text-xs font-semibold text-slate-900 font-mono mt-0.5 block">
+                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block">
                       ₹{cashAmount.toFixed(2)}
                     </span>
                   </div>
                 )}
                 {cardAmount > 0 && (
-                  <div className="p-2 bg-purple-50 border border-purple-200 rounded-xl">
-                    <span className="text-[10px] text-purple-600 flex items-center justify-center space-x-1">
+                  <div className="p-2 bg-white border border-slate-200 rounded-md">
+                    <span className="text-[11px] text-slate-600 flex items-center justify-center space-x-1">
                       <CreditCard className="w-3 h-3" />
-                      <span>Card Swiped</span>
+                      <span>Card</span>
                     </span>
-                    <span className="text-xs font-semibold text-slate-900 font-mono mt-0.5 block">
+                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block">
                       ₹{cardAmount.toFixed(2)}
                     </span>
                   </div>
                 )}
                 {upiAmount > 0 && (
-                  <div className="p-2 bg-amber-50 border border-amber-200 rounded-xl">
-                    <span className="text-[10px] text-amber-700 flex items-center justify-center space-x-1">
+                  <div className="p-2 bg-white border border-slate-200 rounded-md">
+                    <span className="text-[11px] text-amber-700 flex items-center justify-center space-x-1">
                       <QrCode className="w-3 h-3" />
                       <span>UPI QR</span>
                     </span>
-                    <span className="text-xs font-semibold text-slate-900 font-mono mt-0.5 block">
+                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block">
                       ₹{upiAmount.toFixed(2)}
                     </span>
                   </div>
                 )}
                 {creditAmount > 0 && (
-                  <div className="p-2 bg-rose-50 border border-rose-200 rounded-xl">
-                    <span className="text-[10px] text-rose-600 flex items-center justify-center space-x-1">
+                  <div className="p-2 bg-rose-50 border border-rose-200 rounded-md">
+                    <span className="text-[11px] text-rose-600 flex items-center justify-center space-x-1">
                       <BookOpen className="w-3 h-3" />
-                      <span>Credit Due</span>
+                      <span>On credit</span>
                     </span>
-                    <span className="text-xs font-semibold text-rose-600 font-mono mt-0.5 block">
+                    <span className="text-xs font-semibold text-rose-600 tabular-nums mt-0.5 block">
                       ₹{creditAmount.toFixed(2)}
                     </span>
                   </div>
@@ -194,21 +191,21 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
 
           {/* Amount Display */}
           <div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-medium">
-              {upiAmount > 0 ? 'UPI Scan Amount' : isPartial ? 'Grand Total & Due' : 'Authoritative Amount'}
+            <div className="text-[11px] text-slate-500 font-medium">
+              {upiAmount > 0 ? 'Amount to scan' : isPartial ? 'Total and amount due' : 'Bill total'}
             </div>
-            <div className="text-3xl font-bold text-amber-600 font-mono mt-1">
+            <div className="text-3xl font-bold text-amber-600 tabular-nums mt-1">
               ₹{(upiAmount > 0 ? upiAmount : grandTotal).toFixed(2)}
             </div>
-            <div className="text-[11px] text-slate-500 mt-0.5 font-light">
-              {creditAmount > 0 && <span className="text-rose-500 font-medium mr-1.5">Khata Due: ₹{creditAmount.toFixed(2)} •</span>}
+            <div className="text-xs text-slate-500 mt-0.5 font-light">
+              {creditAmount > 0 && <span className="text-rose-500 font-medium mr-1.5">Due: ₹{creditAmount.toFixed(2)} •</span>}
               Inclusive of 18% GST (CGST 9% + SGST 9%)
             </div>
           </div>
 
           {/* Dynamic QR Code Box (Only if UPI amount > 0) */}
           {upiAmount > 0 ? (
-            <div className="p-3.5 bg-white rounded-2xl shadow-xl border border-amber-300/40 relative group">
+            <div className="p-3.5 bg-white rounded-lg shadow-md border border-amber-300/40 relative group">
               {qrDataUrl ? (
                 <img 
                   src={qrDataUrl} 
@@ -216,31 +213,31 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
                   className="w-52 h-52 object-contain mx-auto"
                 />
               ) : (
-                <div className="w-52 h-52 flex items-center justify-center text-slate-400 font-mono text-xs">
+                <div className="w-52 h-52 flex items-center justify-center text-slate-400 tabular-nums text-xs">
                   Generating UPI QR...
                 </div>
               )}
               
               {isPaid && (
-                <div className="absolute inset-0 bg-white/95 backdrop-blur-xs rounded-xl flex flex-col items-center justify-center text-emerald-600 font-bold">
+                <div className="absolute inset-0 bg-white/95 rounded-md flex flex-col items-center justify-center text-slate-600 font-bold">
                   <CheckCircle2 className="w-14 h-14 text-emerald-500 mb-1 drop-shadow" />
-                  <span className="text-base font-serif">PAID IN FULL</span>
-                  <span className="text-xs font-mono text-slate-600 mt-0.5">Ref: {txRef}</span>
+                  <span className="text-base font-serif">Paid in full</span>
+                  <span className="text-xs tabular-nums text-slate-600 mt-0.5">Ref: {txRef}</span>
                 </div>
               )}
             </div>
           ) : creditAmount > 0 ? (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl w-full text-center">
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg w-full text-center">
               <BookOpen className="w-8 h-8 text-rose-500 mx-auto mb-1.5" />
-              <h4 className="text-sm font-medium text-slate-900">Partial Payment Recorded</h4>
+              <h4 className="text-sm font-medium text-slate-900">Part paid</h4>
               <p className="text-xs text-slate-600 mt-1 font-light">
-                Cash Paid: <strong className="text-emerald-600 font-mono">₹{cashAmount.toFixed(2)}</strong> | Balance on Khata: <strong className="text-rose-600 font-mono">₹{creditAmount.toFixed(2)}</strong>
+                Cash: <strong className="text-slate-600 tabular-nums">₹{cashAmount.toFixed(2)}</strong> | Due: <strong className="text-rose-600 tabular-nums">₹{creditAmount.toFixed(2)}</strong>
               </p>
             </div>
           ) : (
-            <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl w-full text-center">
+            <div className="p-5 bg-white border border-slate-200 rounded-lg w-full text-center">
               <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-1.5" />
-              <h4 className="text-sm font-medium text-slate-900">Full Tender Settled</h4>
+              <h4 className="text-sm font-medium text-slate-900">Paid in full</h4>
               <p className="text-xs text-slate-600 mt-1 font-light">
                 Cash (₹{cashAmount.toFixed(2)}) + Card (₹{cardAmount.toFixed(2)}) settled at register.
               </p>
@@ -249,7 +246,7 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
 
           <div className="text-xs text-slate-500 flex items-center space-x-1.5 font-light">
             <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
-            <span>Payee: <strong className="text-slate-900 font-medium">JJ PERFUME</strong> (ICICI UPI)</span>
+            <span>Payee: <strong className="text-slate-900 font-medium">JJ Perfume</strong> (ICICI UPI)</span>
           </div>
 
           {/* Copy UPI Link Button */}
@@ -259,7 +256,7 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
               className="text-xs text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-3 py-1 rounded-full border border-amber-200 flex items-center space-x-1.5 transition"
             >
               {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-              <span>{copied ? 'Intent Link Copied' : 'Copy Direct UPI Intent'}</span>
+              <span>{copied ? 'Link copied' : 'Copy UPI link'}</span>
             </button>
           )}
 
@@ -272,15 +269,15 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
                   value={utrInput}
                   onChange={(e) => setUtrInput(e.target.value)}
                   placeholder="Customer UPI UTR / Bank Ref (Optional)"
-                  className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none font-mono"
+                  className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 placeholder-slate-400 focus:outline-none tabular-nums"
                 />
                 <button
                   onClick={handleConfirmPayment}
                   disabled={isConfirming}
-                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-xl text-xs font-semibold tracking-wide transition shadow-md shadow-emerald-950/20 flex items-center space-x-1.5 whitespace-nowrap"
+                  className="px-4 py-2 bg-emerald-700 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center space-x-1.5 whitespace-nowrap"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>{isConfirming ? 'Verifying...' : 'Mark Paid & Verify'}</span>
+                  <span>{isConfirming ? 'Checking…' : 'Mark as paid'}</span>
                 </button>
               </div>
             </div>
@@ -290,7 +287,7 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
           <div className="w-full pt-3 border-t border-slate-200 grid grid-cols-2 gap-2.5">
             <button
               onClick={() => onPrintInvoice(invoiceData)}
-              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-medium flex items-center justify-center space-x-2 border border-slate-200 transition"
+              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md text-xs font-medium flex items-center justify-center space-x-2 border border-slate-200 transition"
             >
               <Printer className="w-3.5 h-3.5 text-amber-600" />
               <span>A4 Tax Invoice</span>
@@ -298,10 +295,10 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
 
             <button
               onClick={() => onPrintReceipt(invoiceData)}
-              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-medium flex items-center justify-center space-x-2 border border-slate-200 transition"
+              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md text-xs font-medium flex items-center justify-center space-x-2 border border-slate-200 transition"
             >
-              <Receipt className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Thermal Receipt</span>
+              <Receipt className="w-3.5 h-3.5 text-slate-600" />
+              <span>Print receipt</span>
             </button>
           </div>
 
