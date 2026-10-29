@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import DataTable from '../../components/DataTable';
 import { 
   Package, 
   Search, 
@@ -16,7 +17,8 @@ import {
   List,
   Image as ImageIcon,
   Upload,
-  Trash2
+  Trash2,
+  AlertCircle
 } from 'lucide-react';
 import { productService, storeService } from '../../services/api';
 
@@ -60,6 +62,7 @@ export default function ProductsView({ stores: propStores = [] }) {
   };
   const [formData, setFormData] = useState(initialForm);
   const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
   const [errorMsg, setErrorMsg] = useState('');
 
   // Quick Stock In State
@@ -71,6 +74,7 @@ export default function ProductsView({ stores: propStores = [] }) {
   const [stockInSubmitting, setStockInSubmitting] = useState(false);
   const [stockInSuccess, setStockInSuccess] = useState('');
   const [stockInError, setStockInError] = useState('');
+  const [stockInFieldErrors, setStockInFieldErrors] = useState({});
 
   const handleOpenQuickStockIn = (product = null) => {
     const prod = product || products[0];
@@ -80,15 +84,88 @@ export default function ProductsView({ stores: propStores = [] }) {
     setStockInNotes('Stock receipt from distillery / warehouse');
     setStockInSuccess('');
     setStockInError('');
+    setStockInFieldErrors({});
     setIsStockInModalOpen(true);
+  };
+
+  const validateProductForm = () => {
+    const errors = {};
+    const nameTrim = (formData.name || '').trim();
+    if (!nameTrim) {
+      errors.name = 'Fragrance name is required';
+    } else if (nameTrim.length < 2) {
+      errors.name = 'Fragrance name must be at least 2 characters';
+    }
+
+    const skuTrim = (formData.sku || '').trim();
+    if (!skuTrim) {
+      errors.sku = 'SKU code is required';
+    } else if (skuTrim.length < 2) {
+      errors.sku = 'SKU code must be at least 2 characters';
+    }
+
+    if (!formData.categoryId) {
+      errors.categoryId = 'Please select a fragrance category';
+    }
+
+    const costStr = String(formData.purchaseCost ?? '').trim();
+    const costNum = Number(costStr);
+    if (costStr === '' || isNaN(costNum)) {
+      errors.purchaseCost = 'Purchase cost is required';
+    } else if (costNum < 0) {
+      errors.purchaseCost = 'Purchase cost cannot be negative';
+    }
+
+    const priceStr = String(formData.sellingPrice ?? '').trim();
+    const priceNum = Number(priceStr);
+    if (priceStr === '' || isNaN(priceNum)) {
+      errors.sellingPrice = 'Selling price is required';
+    } else if (priceNum <= 0) {
+      errors.sellingPrice = 'Selling price must be greater than ₹0';
+    }
+
+    if (formData.volumeMl !== '' && formData.volumeMl !== null && formData.volumeMl !== undefined) {
+      const volNum = Number(formData.volumeMl);
+      if (isNaN(volNum) || volNum <= 0) {
+        errors.volumeMl = 'Volume must be greater than 0 ml';
+      }
+    }
+
+    if (formData.imageUrl && formData.imageUrl.trim()) {
+      const url = formData.imageUrl.trim();
+      if (!url.startsWith('data:') && !/^https?:\/\//i.test(url)) {
+        errors.imageUrl = 'Please enter a valid image URL starting with http:// or https://';
+      }
+    }
+
+    return errors;
+  };
+
+  const validateStockInForm = () => {
+    const errors = {};
+    if (!stockInProduct || !stockInProduct.id) {
+      errors.product = 'Please select a fragrance product';
+    }
+    if (!stockInStoreId) {
+      errors.store = 'Please select a destination boutique outlet';
+    }
+    const qty = Number(stockInQty);
+    if (stockInQty === '' || stockInQty === null || isNaN(qty) || qty < 1) {
+      errors.qty = 'Quantity must be at least 1 unit';
+    } else if (!Number.isInteger(qty)) {
+      errors.qty = 'Quantity must be a whole number';
+    }
+    return errors;
   };
 
   const handleStockInSubmit = async (e) => {
     e.preventDefault();
-    if (!stockInProduct || !stockInStoreId || !stockInQty) {
-      setStockInError('Please select a product, outlet, and valid quantity.');
+    const validationErrors = validateStockInForm();
+    if (Object.keys(validationErrors).length > 0) {
+      setStockInFieldErrors(validationErrors);
       return;
     }
+    setStockInFieldErrors({});
 
     try {
       setStockInSubmitting(true);
@@ -176,6 +253,8 @@ export default function ProductsView({ stores: propStores = [] }) {
       storeStocks: defaultStoreStocks,
       imageUrl: '',
     });
+    setFormErrors({});
+    setErrorMsg('');
     setIsModalOpen(true);
   };
 
@@ -204,6 +283,8 @@ export default function ProductsView({ stores: propStores = [] }) {
       reorderLevel: product.reorderLevel,
       storeStocks: existingStoreStocks,
     });
+    setFormErrors({});
+    setErrorMsg('');
     setIsModalOpen(true);
   };
 
@@ -233,14 +314,31 @@ export default function ProductsView({ stores: propStores = [] }) {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+    const validationErrors = validateProductForm();
+    if (Object.keys(validationErrors).length > 0) {
+      setFormErrors(validationErrors);
+      return;
+    }
+    setFormErrors({});
+
     try {
       setFormSubmitting(true);
       setErrorMsg('');
 
+      const payload = {
+        ...formData,
+        name: formData.name.trim(),
+        sku: formData.sku.trim(),
+        barcode: formData.barcode ? formData.barcode.trim() : '',
+        purchaseCost: Number(formData.purchaseCost),
+        sellingPrice: Number(formData.sellingPrice),
+        volumeMl: Number(formData.volumeMl) || 100,
+      };
+
       if (editingProduct) {
-        await productService.updateProduct(editingProduct.id, formData);
+        await productService.updateProduct(editingProduct.id, payload);
       } else {
-        await productService.createProduct(formData);
+        await productService.createProduct(payload);
       }
 
       setIsModalOpen(false);
@@ -251,6 +349,171 @@ export default function ProductsView({ stores: propStores = [] }) {
       setFormSubmitting(false);
     }
   };
+
+  const productColumns = useMemo(() => [
+    {
+      key: 'name',
+      header: 'Fragrance',
+      sortAccessor: (prod) => prod.name,
+      sortable: true,
+      render: (_, prod) => (
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+            {prod.imageUrl ? (
+              <img
+                src={prod.imageUrl}
+                alt={prod.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const fallback = e.currentTarget.parentElement?.querySelector('.tbl-fallback');
+                  if (fallback) fallback.classList.remove('hidden');
+                }}
+              />
+            ) : null}
+            <Package className={`tbl-fallback w-5 h-5 text-slate-300 ${prod.imageUrl ? 'hidden' : ''}`} />
+          </div>
+
+          <div className="min-w-0">
+            <div className="font-serif font-medium text-slate-900 text-sm truncate">{prod.name}</div>
+            <div className="text-[11px] text-amber-700 font-medium mt-0.5">
+              {prod.concentration?.replace(/_/g, ' ')} • {prod.volumeMl}ml
+            </div>
+            {prod.fragranceNotes && (
+              <div className="text-[11px] text-slate-500 font-light italic mt-0.5 truncate max-w-xs">
+                {prod.fragranceNotes}
+              </div>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'sku',
+      header: 'SKU & Barcode',
+      sortAccessor: (prod) => prod.sku,
+      sortable: true,
+      className: 'tabular-nums',
+      render: (_, prod) => (
+        <div>
+          <div className="text-slate-900 font-medium flex items-center space-x-1.5 font-mono">
+            <Tag className="w-3 h-3 text-amber-600" />
+            <span>{prod.sku}</span>
+          </div>
+          {prod.barcode && (
+            <div className="text-[11px] text-slate-400 flex items-center space-x-1 mt-0.5 font-light font-mono">
+              <Barcode className="w-3 h-3 text-slate-400" />
+              <span>{prod.barcode}</span>
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      sortAccessor: (prod) => prod.category?.name || '',
+      sortable: true,
+      render: (_, prod) => (
+        <span className="inline-block px-2.5 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-slate-700 text-[11px] font-medium">
+          {prod.category?.name || 'Fragrance'}
+        </span>
+      ),
+    },
+    {
+      key: 'sellingPrice',
+      header: 'Price',
+      sortAccessor: (prod) => Number(prod.sellingPrice || 0),
+      sortable: true,
+      align: 'right',
+      className: 'tabular-nums font-semibold text-slate-900 text-sm whitespace-nowrap',
+      render: (val) => `₹${Number(val).toFixed(2)}`,
+    },
+    {
+      key: 'stockBalances',
+      header: 'Stock by Outlet',
+      sortable: false,
+      render: (_, prod) => (
+        <div className="flex flex-wrap gap-1.5">
+          {prod.stockBalances && prod.stockBalances.length > 0 ? (
+            prod.stockBalances.map((bal) => {
+              const q = bal.quantity;
+              const cityName = bal.store?.city?.name || bal.store?.name?.split(' ')[0] || 'Store';
+              return (
+                <span
+                  key={bal.id || bal.storeId}
+                  className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full text-[11px] tabular-nums border ${
+                    q <= 0
+                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                      : q <= 5
+                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                      : 'bg-slate-100 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  <span className="text-slate-400 font-light">{cityName}:</span>
+                  <span className="font-semibold text-slate-900">{q}</span>
+                </span>
+              );
+            })
+          ) : (
+            <span className="text-slate-400 text-[11px] font-light">No stock recorded</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'stockQuantity',
+      header: 'Total Stock',
+      sortAccessor: (prod) => Number(prod.stockQuantity || 0),
+      sortable: true,
+      align: 'center',
+      className: 'whitespace-nowrap',
+      render: (val) => {
+        const qty = Number(val || 0);
+        const isOutOfStock = qty <= 0;
+        const isLow = qty <= 10;
+        return (
+          <span className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs tabular-nums font-medium border ${
+            isOutOfStock
+              ? 'bg-rose-50 text-rose-700 border-rose-200'
+              : isLow
+              ? 'bg-amber-50 text-amber-800 border-amber-200'
+              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+          }`}>
+            <span>{qty}</span>
+            <span className="text-[11px] opacity-75 font-sans">units</span>
+          </span>
+        );
+      },
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      sortable: false,
+      align: 'center',
+      className: 'whitespace-nowrap',
+      render: (_, prod) => (
+        <div className="flex items-center justify-center space-x-1.5">
+          <button
+            onClick={(e) => { e.stopPropagation(); handleOpenQuickStockIn(prod); }}
+            className="px-2.5 py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition flex items-center space-x-1 cursor-pointer"
+            title="Add / Receive Stock In"
+          >
+            <Plus className="w-3 h-3 text-emerald-700" />
+            <span>Stock In</span>
+          </button>
+
+          <button
+            onClick={(e) => { e.stopPropagation(); handleOpenEditModal(prod); }}
+            className="p-1.5 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
+            title="Edit Fragrance & City Stock"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ),
+    },
+  ], []);
 
   return (
     <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -520,150 +783,18 @@ export default function ProductsView({ stores: propStores = [] }) {
         </div>
       ) : (
         /* LIST / TABLE VIEW */
-        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-[11px] text-slate-500 bg-slate-50/80 font-semibold">
-                  <th className="py-3.5 px-4 font-normal">Fragrance</th>
-                  <th className="py-3.5 px-4 font-normal">SKU and barcode</th>
-                  <th className="py-3.5 px-4 font-normal">Category</th>
-                  <th className="py-3.5 px-4 text-right font-normal">Price</th>
-                  <th className="py-3.5 px-4 font-normal">Stock by city</th>
-                  <th className="py-3.5 px-4 text-center font-normal">Total stock</th>
-                  <th className="py-3.5 px-4 text-center font-normal">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                {products.map((prod) => {
-                  return (
-                    <tr key={prod.id} className="hover:bg-slate-50/80 transition-colors duration-150">
-                      
-                      {/* Image Thumbnail, Name & Notes */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                            {prod.imageUrl ? (
-                              <img
-                                src={prod.imageUrl}
-                                alt={prod.name}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  e.currentTarget.style.display = 'none';
-                                  const fallback = e.currentTarget.parentElement?.querySelector('.tbl-fallback');
-                                  if (fallback) fallback.classList.remove('hidden');
-                                }}
-                              />
-                            ) : null}
-                            <Package className={`tbl-fallback w-5 h-5 text-slate-300 ${prod.imageUrl ? 'hidden' : ''}`} />
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="font-serif font-medium text-slate-900 text-sm truncate">{prod.name}</div>
-                            <div className="text-[11px] text-amber-700 font-medium mt-0.5">
-                              {prod.concentration?.replace(/_/g, ' ')} • {prod.volumeMl}ml
-                            </div>
-                            {prod.fragranceNotes && (
-                              <div className="text-[11px] text-slate-500 font-light italic mt-0.5 truncate max-w-xs">
-                                {prod.fragranceNotes}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* SKU & Barcode */}
-                      <td className="py-3.5 px-4 tabular-nums">
-                        <div className="text-slate-900 font-medium flex items-center space-x-1.5">
-                          <Tag className="w-3 h-3 text-amber-600" />
-                          <span>{prod.sku}</span>
-                        </div>
-                        {prod.barcode && (
-                          <div className="text-[11px] text-slate-400 flex items-center space-x-1 mt-0.5 font-light">
-                            <Barcode className="w-3 h-3 text-slate-400" />
-                            <span>{prod.barcode}</span>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Category */}
-                      <td className="py-3.5 px-4">
-                        <span className="inline-block px-2.5 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-slate-700 text-[11px] font-medium">
-                          {prod.category?.name || 'Fragrance'}
-                        </span>
-                      </td>
-
-                      {/* Selling Price */}
-                      <td className="py-3.5 px-4 text-right tabular-nums font-semibold text-slate-900 text-sm whitespace-nowrap">
-                        ₹{Number(prod.sellingPrice).toFixed(2)}
-                      </td>
-
-                      {/* City-Wise Stock Allocation Badges */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex flex-wrap gap-1.5">
-                          {prod.stockBalances && prod.stockBalances.length > 0 ? (
-                            prod.stockBalances.map((bal) => {
-                              const q = bal.quantity;
-                              const cityName = bal.store?.city?.name || bal.store?.name?.split(' ')[0] || 'Store';
-                              return (
-                                <span 
-                                  key={bal.id || bal.storeId}
-                                  className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full text-[11px] tabular-nums border ${
-                                    q <= 0 
-                                      ? 'bg-rose-50 text-rose-700 border-rose-200' 
-                                      : q <= 5 
-                                      ? 'bg-amber-50 text-amber-800 border-amber-200' 
-                                      : 'bg-slate-100 text-slate-700 border-slate-200'
-                                  }`}
-                                >
-                                  <span className="text-slate-400 font-light">{cityName}:</span>
-                                  <span className="font-semibold text-slate-900">{q}</span>
-                                </span>
-                              );
-                            })
-                          ) : (
-                            <span className="text-slate-400 text-[11px] font-light">No stock recorded</span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Total Network Stock */}
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs tabular-nums font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <span>{prod.stockQuantity}</span>
-                          <span className="text-[11px] opacity-75 font-sans">units</span>
-                        </span>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center space-x-1.5">
-                          <button
-                            onClick={() => handleOpenQuickStockIn(prod)}
-                            className="px-2.5 py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition flex items-center space-x-1 cursor-pointer"
-                            title="Add / Receive Stock In"
-                          >
-                            <Plus className="w-3 h-3 text-emerald-700" />
-                            <span>Stock In</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleOpenEditModal(prod)}
-                            className="p-1.5 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
-                            title="Edit Fragrance & City Stock"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable
+          columns={productColumns}
+          data={products}
+          loading={loading}
+          searchPlaceholder="Instant search fragrance name, SKU, notes, barcode..."
+          defaultPageSize={10}
+          pageSizeOptions={[10, 25, 50, 100]}
+          emptyIcon={Package}
+          emptyMessage="No fragrances found"
+          emptySubtext="Try adjusting your category filter or search keywords."
+          initialSort={{ key: 'name', direction: 'asc' }}
+        />
       )}
 
       {/* Add / Edit Product Modal with Image & Multi-City Stock Inputs */}
@@ -697,7 +828,7 @@ export default function ProductsView({ stores: propStores = [] }) {
               </div>
             )}
 
-            <form onSubmit={handleFormSubmit} className="mt-4 space-y-4">
+            <form noValidate onSubmit={handleFormSubmit} className="mt-4 space-y-4">
               
               {/* Product Image Section */}
               <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200">
@@ -743,7 +874,10 @@ export default function ProductsView({ stores: propStores = [] }) {
                       {formData.imageUrl && (
                         <button
                           type="button"
-                          onClick={() => setFormData({ ...formData, imageUrl: '' })}
+                          onClick={() => {
+                            setFormData({ ...formData, imageUrl: '' });
+                            if (formErrors.imageUrl) setFormErrors((prev) => ({ ...prev, imageUrl: '' }));
+                          }}
                           className="px-2.5 py-1.5 text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-md text-xs font-medium transition flex items-center gap-1 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -753,39 +887,80 @@ export default function ProductsView({ stores: propStores = [] }) {
                     </div>
 
                     <input
-                      type="url"
+                      type="text"
                       value={formData.imageUrl}
-                      onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                      onChange={(e) => {
+                        setFormData({ ...formData, imageUrl: e.target.value });
+                        if (formErrors.imageUrl) setFormErrors((prev) => ({ ...prev, imageUrl: '' }));
+                      }}
                       placeholder="Or paste external image URL (https://...)"
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 placeholder-slate-400 focus:outline-none transition shadow-xs"
+                      className={`w-full px-2.5 py-1.5 rounded-md text-xs text-slate-900 placeholder-slate-400 focus:outline-none transition shadow-xs border ${
+                        formErrors.imageUrl
+                          ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20'
+                          : 'border-slate-200 focus:border-amber-500 bg-white'
+                      }`}
                     />
+                    {formErrors.imageUrl && (
+                      <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-sans">
+                        <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                        <span>{formErrors.imageUrl}</span>
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-medium text-slate-700 block mb-1">Fragrance Name *</label>
+                  <label className="text-xs font-medium text-slate-700 block mb-1">
+                    Fragrance Name <span className="text-rose-600">*</span>
+                  </label>
                   <input
                     type="text"
-                    required
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, name: e.target.value });
+                      if (formErrors.name) setFormErrors((prev) => ({ ...prev, name: '' }));
+                    }}
                     placeholder="e.g. JJ Royal Oud Extreme"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 focus:outline-none transition shadow-sm"
+                    className={`w-full px-3 py-2 rounded-md text-xs text-slate-900 focus:outline-none transition shadow-sm border ${
+                      formErrors.name
+                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20'
+                        : 'border-slate-200 focus:border-amber-500 bg-slate-50'
+                    }`}
                   />
+                  {formErrors.name && (
+                    <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-sans">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      <span>{formErrors.name}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-700 block mb-1">SKU Code *</label>
+                  <label className="text-xs font-medium text-slate-700 block mb-1">
+                    SKU Code <span className="text-rose-600">*</span>
+                  </label>
                   <input
                     type="text"
-                    required
                     value={formData.sku}
-                    onChange={(e) => setFormData({ ...formData, sku: e.target.value.toUpperCase() })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, sku: e.target.value.toUpperCase() });
+                      if (formErrors.sku) setFormErrors((prev) => ({ ...prev, sku: '' }));
+                    }}
                     placeholder="e.g. JJ-OUD-EXT"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm"
+                    className={`w-full px-3 py-2 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm border ${
+                      formErrors.sku
+                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20'
+                        : 'border-slate-200 focus:border-amber-500 bg-slate-50'
+                    }`}
                   />
+                  {formErrors.sku && (
+                    <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-sans">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      <span>{formErrors.sku}</span>
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -802,18 +977,34 @@ export default function ProductsView({ stores: propStores = [] }) {
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-700 block mb-1">Category *</label>
+                  <label className="text-xs font-medium text-slate-700 block mb-1">
+                    Category <span className="text-rose-600">*</span>
+                  </label>
                   <select
                     value={formData.categoryId}
-                    onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 focus:outline-none cursor-pointer shadow-sm"
+                    onChange={(e) => {
+                      setFormData({ ...formData, categoryId: e.target.value });
+                      if (formErrors.categoryId) setFormErrors((prev) => ({ ...prev, categoryId: '' }));
+                    }}
+                    className={`w-full px-3 py-2 rounded-md text-xs text-slate-900 focus:outline-none cursor-pointer shadow-sm border ${
+                      formErrors.categoryId
+                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20'
+                        : 'border-slate-200 focus:border-amber-500 bg-white'
+                    }`}
                   >
+                    <option value="">-- Select Category --</option>
                     {categories.map((cat) => (
                       <option key={cat.id} value={cat.id} className="bg-white text-slate-900">
                         {cat.name}
                       </option>
                     ))}
                   </select>
+                  {formErrors.categoryId && (
+                    <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-sans">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      <span>{formErrors.categoryId}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -838,33 +1029,77 @@ export default function ProductsView({ stores: propStores = [] }) {
                   <input
                     type="number"
                     value={formData.volumeMl}
-                    onChange={(e) => setFormData({ ...formData, volumeMl: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm"
+                    onChange={(e) => {
+                      setFormData({ ...formData, volumeMl: e.target.value });
+                      if (formErrors.volumeMl) setFormErrors((prev) => ({ ...prev, volumeMl: '' }));
+                    }}
+                    placeholder="100"
+                    className={`w-full px-3 py-2 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm border ${
+                      formErrors.volumeMl
+                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20'
+                        : 'border-slate-200 focus:border-amber-500 bg-slate-50'
+                    }`}
                   />
+                  {formErrors.volumeMl && (
+                    <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-sans">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      <span>{formErrors.volumeMl}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-700 block mb-1">Purchase Cost (₹) *</label>
+                  <label className="text-xs font-medium text-slate-700 block mb-1">
+                    Purchase Cost (₹) <span className="text-rose-600">*</span>
+                  </label>
                   <input
                     type="number"
                     step="0.01"
-                    required
                     value={formData.purchaseCost}
-                    onChange={(e) => setFormData({ ...formData, purchaseCost: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm"
+                    onChange={(e) => {
+                      setFormData({ ...formData, purchaseCost: e.target.value });
+                      if (formErrors.purchaseCost) setFormErrors((prev) => ({ ...prev, purchaseCost: '' }));
+                    }}
+                    placeholder="0.00"
+                    className={`w-full px-3 py-2 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm border ${
+                      formErrors.purchaseCost
+                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20'
+                        : 'border-slate-200 focus:border-amber-500 bg-slate-50'
+                    }`}
                   />
+                  {formErrors.purchaseCost && (
+                    <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-sans">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      <span>{formErrors.purchaseCost}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-700 block mb-1">Selling Price (₹) *</label>
+                  <label className="text-xs font-medium text-slate-700 block mb-1">
+                    Selling Price (₹) <span className="text-rose-600">*</span>
+                  </label>
                   <input
                     type="number"
                     step="0.01"
-                    required
                     value={formData.sellingPrice}
-                    onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm"
+                    onChange={(e) => {
+                      setFormData({ ...formData, sellingPrice: e.target.value });
+                      if (formErrors.sellingPrice) setFormErrors((prev) => ({ ...prev, sellingPrice: '' }));
+                    }}
+                    placeholder="0.00"
+                    className={`w-full px-3 py-2 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none transition shadow-sm border ${
+                      formErrors.sellingPrice
+                        ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20'
+                        : 'border-slate-200 focus:border-amber-500 bg-slate-50'
+                    }`}
                   />
+                  {formErrors.sellingPrice && (
+                    <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-sans">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      <span>{formErrors.sellingPrice}</span>
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -924,7 +1159,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                 <button
                   type="submit"
                   disabled={formSubmitting}
-                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center space-x-1.5 cursor-pointer"
+                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center space-x-1.5 cursor-pointer disabled:opacity-60"
                 >
                   {formSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   <span>{editingProduct ? 'Update Fragrance & Stock' : 'Save Fragrance SKU'}</span>
@@ -979,58 +1214,103 @@ export default function ProductsView({ stores: propStores = [] }) {
               </div>
             )}
 
-            <form onSubmit={handleStockInSubmit} className="mt-4 space-y-3.5">
+            <form noValidate onSubmit={handleStockInSubmit} className="mt-4 space-y-3.5">
               {/* Product Selection */}
               <div>
-                <label className="text-xs font-medium text-slate-700 block mb-1">Fragrance Product *</label>
+                <label className="text-xs font-medium text-slate-700 block mb-1">
+                  Fragrance Product <span className="text-rose-600">*</span>
+                </label>
                 <select
                   value={stockInProduct?.id || ''}
                   onChange={(e) => {
                     const p = products.find((prod) => prod.id === e.target.value);
-                    if (p) setStockInProduct(p);
+                    if (p) {
+                      setStockInProduct(p);
+                      if (stockInFieldErrors.product) setStockInFieldErrors((prev) => ({ ...prev, product: '' }));
+                    }
                   }}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 focus:outline-none cursor-pointer"
+                  className={`w-full px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none cursor-pointer border ${
+                    stockInFieldErrors.product
+                      ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20'
+                      : 'border-slate-200 focus:border-amber-500 bg-slate-50'
+                  }`}
                 >
+                  <option value="">-- Select Product --</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} ({p.sku}) — Total: {p.stockQuantity}
                     </option>
                   ))}
                 </select>
+                {stockInFieldErrors.product && (
+                  <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-sans">
+                    <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                    <span>{stockInFieldErrors.product}</span>
+                  </p>
+                )}
               </div>
 
               {/* Destination Outlet */}
               <div>
-                <label className="text-xs font-medium text-slate-700 block mb-1">Destination Boutique / City *</label>
+                <label className="text-xs font-medium text-slate-700 block mb-1">
+                  Destination Boutique / City <span className="text-rose-600">*</span>
+                </label>
                 <select
                   value={stockInStoreId}
-                  onChange={(e) => setStockInStoreId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-xs text-slate-900 focus:outline-none cursor-pointer"
+                  onChange={(e) => {
+                    setStockInStoreId(e.target.value);
+                    if (stockInFieldErrors.store) setStockInFieldErrors((prev) => ({ ...prev, store: '' }));
+                  }}
+                  className={`w-full px-3 py-2 rounded-xl text-xs text-slate-900 focus:outline-none cursor-pointer border ${
+                    stockInFieldErrors.store
+                      ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20'
+                      : 'border-slate-200 focus:border-amber-500 bg-slate-50'
+                  }`}
                 >
+                  <option value="">-- Select Boutique Outlet --</option>
                   {stores.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.city?.name} — {s.name}
                     </option>
                   ))}
                 </select>
+                {stockInFieldErrors.store && (
+                  <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-sans">
+                    <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                    <span>{stockInFieldErrors.store}</span>
+                  </p>
+                )}
               </div>
 
               {/* Quantity to Add & Quick Preset Pills */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-medium text-slate-700">Quantity to Add (Units) *</label>
+                  <label className="text-xs font-medium text-slate-700">
+                    Quantity to Add (Units) <span className="text-rose-600">*</span>
+                  </label>
                   <span className="text-[10px] text-slate-500 font-mono">
                     Current: {stockInProduct?.stockBalances?.find((b) => b.storeId === stockInStoreId)?.quantity || 0} units
                   </span>
                 </div>
                 <input
                   type="number"
-                  min="1"
-                  required
                   value={stockInQty}
-                  onChange={(e) => setStockInQty(Math.max(1, parseInt(e.target.value) || 0))}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl text-sm font-bold font-mono text-slate-900 focus:outline-none"
+                  onChange={(e) => {
+                    setStockInQty(e.target.value);
+                    if (stockInFieldErrors.qty) setStockInFieldErrors((prev) => ({ ...prev, qty: '' }));
+                  }}
+                  className={`w-full px-3 py-2 rounded-xl text-sm font-bold font-mono text-slate-900 focus:outline-none border ${
+                    stockInFieldErrors.qty
+                      ? 'border-rose-400 focus:border-rose-500 bg-rose-50/20'
+                      : 'border-slate-200 focus:border-amber-500 bg-slate-50'
+                  }`}
                 />
+                {stockInFieldErrors.qty && (
+                  <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-sans">
+                    <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                    <span>{stockInFieldErrors.qty}</span>
+                  </p>
+                )}
 
                 {/* Quick Add Pills */}
                 <div className="flex gap-1.5 mt-2">
@@ -1038,10 +1318,13 @@ export default function ProductsView({ stores: propStores = [] }) {
                     <button
                       key={preset}
                       type="button"
-                      onClick={() => setStockInQty(preset)}
+                      onClick={() => {
+                        setStockInQty(preset);
+                        if (stockInFieldErrors.qty) setStockInFieldErrors((prev) => ({ ...prev, qty: '' }));
+                      }}
                       className={`flex-1 py-1 text-[11px] font-mono rounded-lg border transition cursor-pointer ${
-                        stockInQty === preset
-                          ? 'bg-amber-500 text-slate-950 border-amber-500 font-bold'
+                        Number(stockInQty) === preset
+                          ? 'bg-amber-500 text-white border-amber-500 font-bold'
                           : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
                       }`}
                     >
@@ -1074,7 +1357,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                 <button
                   type="submit"
                   disabled={stockInSubmitting}
-                  className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 text-white rounded-full text-xs font-semibold tracking-wide transition shadow-sm flex items-center space-x-1.5 cursor-pointer"
+                  className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold transition shadow-md flex items-center space-x-1.5 cursor-pointer disabled:opacity-60"
                 >
                   {stockInSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   <span>{stockInSubmitting ? 'Updating Stock...' : 'Confirm Stock In'}</span>

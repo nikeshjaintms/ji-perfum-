@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import DataTable from '../../components/DataTable';
 import { LayoutGrid, List, Package } from 'lucide-react';
 import { productService, billingService } from '../../services/api';
 
@@ -71,7 +72,8 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
 
     fetchCatalog();
 
-    return () => {
+  
+  return () => {
       active = false;
     };
   }, [selectedStore?.id]);
@@ -383,6 +385,159 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
   const fieldClass =
     'w-full px-2.5 py-1.5 bg-white border border-slate-300 focus:border-amber-500 rounded-md text-sm text-slate-900 placeholder-slate-400 focus:outline-none';
 
+const posColumns = useMemo(() => [
+    {
+      key: 'name',
+      header: 'Fragrance',
+      sortAccessor: (prod) => prod.name,
+      sortable: true,
+      render: (_, prod) => (
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+            {prod.imageUrl ? (
+              <img
+                src={prod.imageUrl}
+                alt={prod.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const fallback = e.currentTarget.parentElement?.querySelector('.pos-tbl-fallback');
+                  if (fallback) fallback.classList.remove('hidden');
+                }}
+              />
+            ) : null}
+            <Package className={`pos-tbl-fallback w-5 h-5 text-slate-300 ${prod.imageUrl ? 'hidden' : ''}`} />
+          </div>
+
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2">
+              <span className="font-serif text-sm font-medium text-slate-900 truncate">{prod.name}</span>
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {prod.concentration ? prod.concentration.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : 'Perfume'} · {prod.volumeMl} ml
+            </div>
+            {prod.fragranceNotes && (
+              <div className="text-[11px] text-slate-600 italic font-serif truncate max-w-xs mt-0.5">
+                {prod.fragranceNotes.split('|').map((n) => n.trim()).join(' · ')}
+              </div>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'sku',
+      header: 'SKU / Barcode',
+      sortAccessor: (prod) => prod.sku,
+      sortable: true,
+      className: 'tabular-nums font-mono',
+      render: (_, prod) => (
+        <div>
+          <span className="text-slate-800 font-medium">{prod.sku}</span>
+          {prod.barcode && <span className="block text-[11px] text-slate-400 font-light">{prod.barcode}</span>}
+        </div>
+      ),
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      sortAccessor: (prod) => prod.category?.name || '',
+      sortable: true,
+      render: (_, prod) => (
+        <span className="inline-block px-2 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-slate-700 text-[11px] font-medium">
+          {prod.category?.name || 'Fragrance'}
+        </span>
+      ),
+    },
+    {
+      key: 'stock',
+      header: 'Counter Stock',
+      sortAccessor: (prod) => {
+        return prod.currentStoreStock !== undefined ? prod.currentStoreStock : prod.stockQuantity;
+      },
+      sortable: true,
+      render: (_, prod) => {
+        const storeStock = prod.currentStoreStock !== undefined ? prod.currentStoreStock : prod.stockQuantity;
+        const isOutOfStock = storeStock <= 0;
+        return (
+          <div className="text-xs">
+            {isOutOfStock ? (
+              <>
+                <span className="text-rose-700 font-semibold">Out of stock here</span>
+                <span className="block text-[11px] text-slate-400">{prod.stockQuantity} across other counters</span>
+              </>
+            ) : (
+              <>
+                <span className={`font-semibold ${storeStock <= 5 ? 'text-amber-700' : 'text-slate-800'}`}>
+                  {storeStock} in {cityName}
+                </span>
+                <span className="block text-[11px] text-slate-400">{prod.stockQuantity} total in chain</span>
+              </>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'sellingPrice',
+      header: 'Price',
+      sortAccessor: (prod) => Number(prod.sellingPrice || 0),
+      sortable: true,
+      align: 'right',
+      className: 'tabular-nums whitespace-nowrap',
+      render: (val) => (
+        <div>
+          <span className="block text-sm font-semibold text-slate-900">
+            ₹{Number(val).toLocaleString('en-IN')}
+          </span>
+          <span className="block text-[10px] text-slate-400 font-light">+ 18% GST</span>
+        </div>
+      ),
+    },
+    {
+      key: 'inCart',
+      header: 'In Bill',
+      sortable: false,
+      align: 'center',
+      render: (_, prod) => {
+        const inCartItem = cart.find((i) => i.product.id === prod.id);
+        if (!inCartItem) return <span className="text-slate-300 text-xs">—</span>;
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-white shadow-2xs">
+            × {inCartItem.quantity}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      sortable: false,
+      align: 'center',
+      render: (_, prod) => {
+        const storeStock = prod.currentStoreStock !== undefined ? prod.currentStoreStock : prod.stockQuantity;
+        const isOutOfStock = storeStock <= 0;
+        return (
+          <button
+            type="button"
+            disabled={isOutOfStock}
+            onClick={(e) => {
+              e.stopPropagation();
+              addToCart(prod);
+            }}
+            className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+              isOutOfStock
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                : 'bg-amber-500 hover:bg-amber-600 text-white shadow-2xs'
+            }`}
+          >
+            {isOutOfStock ? 'Sold out' : '+ Add'}
+          </button>
+        );
+      },
+    },
+  ], [cart, cityName]);
+
   return (
     <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-10 gap-y-8">
@@ -513,7 +668,7 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
 
                       {/* In-Cart Quantity Badge */}
                       {inCartItem && (
-                        <span className="absolute top-2 right-2 bg-amber-500 text-slate-950 font-bold text-xs px-2 py-0.5 rounded-full shadow-sm">
+                        <span className="absolute top-2 right-2 bg-amber-500 text-white font-bold text-xs px-2 py-0.5 rounded-full shadow-sm">
                           × {inCartItem.quantity}
                         </span>
                       )}
@@ -523,7 +678,7 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
                         isOutOfStock
                           ? 'bg-rose-500/90 text-white'
                           : storeStock <= 5
-                          ? 'bg-amber-500/90 text-slate-950 font-bold'
+                          ? 'bg-amber-500/90 text-white font-bold'
                           : 'bg-slate-900/80 text-emerald-300'
                       }`}>
                         {isOutOfStock ? 'Out' : `${storeStock} at ${cityName}`}
@@ -555,75 +710,30 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
             </div>
           ) : (
             /* POS LIST VIEW */
-            <ul className="divide-y divide-slate-200 max-h-[calc(100vh-14rem)] overflow-y-auto">
-              {filteredProducts.map((prod) => {
-                const inCartItem = cart.find((i) => i.product.id === prod.id);
+            <DataTable
+              columns={posColumns}
+              data={filteredProducts}
+              loading={loading}
+              searchable={false}
+              pagination={true}
+              defaultPageSize={10}
+              pageSizeOptions={[10, 25, 50]}
+              emptyIcon={Package}
+              emptyMessage="Nothing matches that search"
+              emptySubtext="Try part of the name, or clear the filter above."
+              initialSort={{ key: 'name', direction: 'asc' }}
+              onRowClick={(prod) => {
                 const storeStock = prod.currentStoreStock !== undefined ? prod.currentStoreStock : prod.stockQuantity;
-                const isOutOfStock = storeStock <= 0;
-                return (
-                  <li key={prod.id}>
-                    <button
-                      onClick={() => addToCart(prod)}
-                      disabled={isOutOfStock}
-                      className={`w-full text-left grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_12rem_7rem] items-center gap-x-4 gap-y-1 py-3 px-2 -mx-2 rounded-md transition-colors ${
-                        isOutOfStock ? 'opacity-55 cursor-not-allowed' : 'hover:bg-white cursor-pointer'
-                      }`}
-                    >
-                      {/* Product Thumbnail */}
-                      <div className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                        {prod.imageUrl ? (
-                          <img
-                            src={prod.imageUrl}
-                            alt={prod.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                              const fallback = e.currentTarget.parentElement?.querySelector('.pos-tbl-fallback');
-                              if (fallback) fallback.classList.remove('hidden');
-                            }}
-                          />
-                        ) : null}
-                        <Package className={`pos-tbl-fallback w-5 h-5 text-slate-300 ${prod.imageUrl ? 'hidden' : ''}`} />
-                      </div>
-
-                      <span className="min-w-0">
-                        <span className="flex items-baseline gap-2">
-                          <span className="font-serif text-base font-medium text-slate-900 truncate">{prod.name}</span>
-                          {inCartItem && <span className="text-xs font-semibold text-amber-600 shrink-0">× {inCartItem.quantity} in bill</span>}
-                        </span>
-                        <span className="block text-xs text-slate-500">
-                          {prod.concentration.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())} · {prod.volumeMl} ml · {prod.sku}
-                        </span>
-                        {prod.fragranceNotes && (
-                          <span className="block text-xs text-slate-600 italic font-serif truncate mt-0.5">
-                            {prod.fragranceNotes.split('|').map((n) => n.trim()).join(' · ')}
-                          </span>
-                        )}
-                      </span>
-
-                      <span className="hidden sm:block text-xs text-slate-500">
-                        {isOutOfStock ? (
-                          <>
-                            <span className="text-rose-700 font-medium">Out of stock here</span>
-                            <span className="block text-[11px]">{prod.stockQuantity} in other counters</span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-slate-800 font-medium">{storeStock} in {cityName}</span>
-                            <span className="block text-[11px]">{prod.stockQuantity} across all counters</span>
-                          </>
-                        )}
-                      </span>
-
-                      <span className="text-right">
-                        <span className="block text-base font-semibold text-slate-900 tabular-nums">₹{Number(prod.sellingPrice).toLocaleString('en-IN')}</span>
-                        <span className="block text-[11px] text-slate-400">+ 18% GST</span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+                if (storeStock > 0) addToCart(prod);
+              }}
+              rowClassName={(prod) => {
+                const storeStock = prod.currentStoreStock !== undefined ? prod.currentStoreStock : prod.stockQuantity;
+                const inCart = cart.some((i) => i.product.id === prod.id);
+                if (storeStock <= 0) return 'opacity-55 cursor-not-allowed bg-slate-50/50';
+                if (inCart) return 'bg-amber-50/30';
+                return '';
+              }}
+            />
           )}
         </section>
 

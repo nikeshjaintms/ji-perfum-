@@ -246,7 +246,7 @@ export default function AddOutletModal({ onClose, onStoreCreated }) {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full mt-2 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-black font-semibold rounded-xl text-xs transition shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer"
+                className="w-full mt-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-xs transition shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>{submitting ? 'Saving City...' : 'Save City & Proceed to Add Store'}</span>
@@ -331,7 +331,7 @@ export default function AddOutletModal({ onClose, onStoreCreated }) {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full mt-2 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-black font-semibold rounded-xl text-xs transition shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer"
+                className="w-full mt-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-xs transition shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>{submitting ? 'Creating Outlet...' : 'Create Boutique Outlet'}</span>

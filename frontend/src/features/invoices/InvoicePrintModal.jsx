@@ -173,11 +173,11 @@ export default function InvoicePrintModal({ invoice, mode = 'a4', onClose }) {
               id="print-tab-thermal"
               className={`px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center space-x-1.5 transition ${
                 currentMode === 'thermal'
-                  ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-300 shadow-sm'
+                  ? 'bg-amber-500/10 text-amber-700 border border-amber-300 shadow-sm'
                   : 'bg-transparent text-slate-500 hover:text-slate-900 border border-transparent'
               }`}
             >
-              <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+              <Receipt className="w-3.5 h-3.5 text-amber-600" />
               <span>80mm Thermal Receipt</span>
             </button>
           </div>
@@ -218,7 +218,7 @@ export default function InvoicePrintModal({ invoice, mode = 'a4', onClose }) {
             <button
               onClick={handlePrint}
               id="confirm-print-btn"
-              className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-black rounded-full text-xs font-semibold tracking-wide transition shadow-md shadow-amber-950/20 flex items-center space-x-2 cursor-pointer"
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-semibold tracking-wide transition shadow-md shadow-amber-950/20 flex items-center space-x-2 cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>{currentMode === 'a4' ? 'Print A4 Invoice' : 'Print Thermal Receipt'}</span>
