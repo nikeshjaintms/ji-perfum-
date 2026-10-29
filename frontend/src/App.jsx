@@ -109,7 +109,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-slate-900 flex flex-col font-sans selection:bg-amber-500/20 selection:text-amber-900">
+    <div className="min-h-screen bg-paper text-slate-900 flex flex-col font-sans">
       
       {/* Navbar with Multi-City Selector & brand identity */}
       <Navbar
@@ -125,13 +125,9 @@ export default function App() {
       />
 
       {/* Main ERP Workspaces */}
-      <main className="flex-1 pb-12">
+      <main className="flex-1 pb-10">
         {isInitializing ? (
-          <div className="flex flex-col items-center justify-center py-32 text-slate-500">
-            <div className="w-9 h-9 border-2 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-4" />
-            <span className="font-serif tracking-[0.25em] text-xs uppercase text-amber-700 font-medium">JJ PERFUME</span>
-            <span className="text-[10px] tracking-widest text-slate-500 uppercase mt-1">Connecting Haute Parfumerie Ledger...</span>
-          </div>
+          <p className="py-32 text-center text-sm text-slate-500">Opening the counter…</p>
         ) : (
           <>
             {activeTab === 'pos' && (
@@ -159,22 +155,6 @@ export default function App() {
           </>
         )}
       </main>
-
-      {/* Footer Branding */}
-      <footer className="border-t border-slate-200 bg-white py-5 text-center text-[11px] text-slate-500 no-print">
-        <div className="flex flex-wrap items-center justify-center gap-2.5 font-light">
-          <span className="font-serif tracking-widest text-slate-800 font-semibold">JJ PERFUME</span>
-          <span>•</span>
-          <span className="tracking-wide text-slate-600">HAUTE PARFUMERIE FISCAL ERP</span>
-          <span>•</span>
-          <span className="text-slate-600">Mandvi Flagship • Mumbai • Delhi • Bengaluru</span>
-          <span>•</span>
-          <span className="inline-flex items-center space-x-1.5 text-emerald-700 font-mono text-[10px]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span>MySQL 8.4 Engine Connected</span>
-          </span>
-        </div>
-      </footer>
 
       {/* Dynamic QR Payment Modal */}
       {activeQrInvoice && (

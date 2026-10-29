@@ -125,6 +125,7 @@ export const createProduct = async (req, res) => {
       sku,
       barcode,
       brand,
+      imageUrl,
       description,
       fragranceNotes,
       concentration,
@@ -164,6 +165,7 @@ export const createProduct = async (req, res) => {
           sku: sku.trim().toUpperCase(),
           barcode: barcode ? barcode.trim() : null,
           brand: brand ? brand.trim() : 'J I PERFUME',
+          imageUrl: imageUrl ? imageUrl.trim() : null,
           description,
           fragranceNotes,
           concentration: concentration || 'EAU_DE_PARFUM',
@@ -224,6 +226,8 @@ export const updateProduct = async (req, res) => {
 
     const updatePayload = {};
     if (data.name) updatePayload.name = data.name.trim();
+    if (data.brand !== undefined) updatePayload.brand = data.brand ? data.brand.trim() : 'J I PERFUME';
+    if (data.imageUrl !== undefined) updatePayload.imageUrl = data.imageUrl ? data.imageUrl.trim() : null;
     if (data.barcode !== undefined) updatePayload.barcode = data.barcode ? data.barcode.trim() : null;
     if (data.description !== undefined) updatePayload.description = data.description;
     if (data.fragranceNotes !== undefined) updatePayload.fragranceNotes = data.fragranceNotes;

@@ -132,6 +132,7 @@ model Product {
   sku            String         @unique @db.VarChar(100)
   barcode        String?        @unique @db.VarChar(100)
   brand          String         @default("J I PERFUME") @db.VarChar(100)
+  imageUrl       String?        @db.LongText
   description    String?        @db.Text
   fragranceNotes String?        @db.Text
   concentration  Concentration  @default(EAU_DE_PARFUM)
