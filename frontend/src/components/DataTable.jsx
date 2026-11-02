@@ -15,11 +15,14 @@ import {
 
 /**
  * Universal DataTable Component for JJ Perfume ERP
+ * Supports both Client-Side and Server-Side Pagination & Searching seamlessly.
  */
 export default function DataTable({
   columns = [],
   data = [],
   loading = false,
+  showSrNo = true,
+  srNoHeader = 'Sr No',
   searchPlaceholder = 'Search records...',
   searchable = true,
   searchFields = null,
@@ -35,24 +38,71 @@ export default function DataTable({
   toolbarLeft = null,
   toolbarRight = null,
   containerClassName = '',
+  // Controlled Search & Debouncing
   searchValue: controlledSearchValue = null,
   onSearchChange: controlledOnSearchChange = null,
+  debounceMs = 350,
+  // Server-side Pagination & Sorting props
+  serverSide = false,
+  totalCount = undefined,
+  totalRecords = undefined,
+  page: controlledPage = undefined,
+  currentPage: controlledCurrentPage = undefined,
+  onPageChange = null,
+  pageSize: controlledPageSize = undefined,
+  onPageSizeChange = null,
+  sortConfig: controlledSortConfig = null,
+  onSortChange = null,
 }) {
-  const [internalSearch, setInternalSearch] = useState('');
-  const [sortConfig, setSortConfig] = useState(initialSort);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(defaultPageSize);
+  // Page state
+  const isControlledPage = controlledPage !== undefined || controlledCurrentPage !== undefined;
+  const activePageProp = controlledPage !== undefined ? controlledPage : controlledCurrentPage;
+  const [internalPage, setInternalPage] = useState(1);
+  const activePage = isControlledPage ? activePageProp : internalPage;
+
+  // Page size state
+  const isControlledPageSize = controlledPageSize !== undefined;
+  const [internalPageSize, setInternalPageSize] = useState(defaultPageSize);
+  const activePageSize = isControlledPageSize ? controlledPageSize : internalPageSize;
+
+  // Sorting state
+  const isControlledSort = controlledSortConfig !== null && controlledSortConfig !== undefined;
+  const [internalSort, setInternalSort] = useState(initialSort);
+  const sortConfig = isControlledSort ? controlledSortConfig : internalSort;
+
+  // Search input state (with debouncing for smooth typing)
+  const isControlledSearch = controlledSearchValue !== null && controlledSearchValue !== undefined;
+  const [searchTerm, setSearchTerm] = useState(isControlledSearch ? controlledSearchValue : '');
+
+  // Keep local search in sync if parent changes searchValue externally
+  useEffect(() => {
+    if (isControlledSearch) {
+      setSearchTerm(controlledSearchValue);
+    }
+  }, [isControlledSearch, controlledSearchValue]);
+
+  // Debounce search callback for parent / server queries
+  useEffect(() => {
+    if (!controlledOnSearchChange) return;
+
+    const handler = setTimeout(() => {
+      if (searchTerm !== (controlledSearchValue ?? '')) {
+        controlledOnSearchChange(searchTerm);
+      }
+    }, debounceMs);
+
+    return () => clearTimeout(handler);
+  }, [searchTerm, controlledOnSearchChange, debounceMs, controlledSearchValue]);
+
+  // Reset internal page when client-side search or page size changes
+  useEffect(() => {
+    if (!serverSide) {
+      setInternalPage(1);
+    }
+  }, [searchTerm, activePageSize, serverSide]);
 
   const safeData = useMemo(() => (Array.isArray(data) ? data : []), [data]);
-  const safeColumns = useMemo(() => (Array.isArray(columns) ? columns : []), [columns]);
-
-  const isControlledSearch = controlledSearchValue !== null;
-  const searchQuery = isControlledSearch ? controlledSearchValue : internalSearch;
-
-  // Reset page when search or data length changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, pageSize]);
+  const rawColumns = useMemo(() => (Array.isArray(columns) ? columns : []), [columns]);
 
   // Extract cell value helper
   const getCellValue = (row, col) => {
@@ -73,18 +123,17 @@ export default function DataTable({
     return '';
   };
 
-  // 1. Filtered Data (Global Client-side Search)
+  // 1. Client-Side Filtered Data
   const filteredData = useMemo(() => {
-    if (!searchQuery || !searchQuery.trim()) {
-      return safeData;
-    }
+    if (serverSide) return safeData; // Backend handles filtering
+    if (!searchTerm || !searchTerm.trim()) return safeData;
 
-    const query = searchQuery.toLowerCase().trim();
+    const query = searchTerm.toLowerCase().trim();
 
     return safeData.filter((row) => {
       if (!row) return false;
 
-      // If custom searchFields provided
+      // Custom search fields provided
       if (Array.isArray(searchFields) && searchFields.length > 0) {
         return searchFields.some((field) => {
           let val = '';
@@ -101,127 +150,180 @@ export default function DataTable({
         });
       }
 
-      // Default: Search across all column values and stringifiable row properties
-      const matchesColumn = safeColumns.some((col) => {
+      // Search across column accessors
+      return rawColumns.some((col) => {
         const val = getCellValue(row, col);
         if (val === null || val === undefined) return false;
         return String(val).toLowerCase().includes(query);
       });
-
-      if (matchesColumn) return true;
-
-      // Fallback check on common entity properties
-      const commonFields = [
-        row.name,
-        row.sku,
-        row.barcode,
-        row.invoiceNumber,
-        row.email,
-        row.phone,
-        row.customer?.name,
-        row.customer?.phone,
-        row.store?.name,
-        row.brand,
-        row.category?.name
-      ];
-      return commonFields.some((f) => f && String(f).toLowerCase().includes(query));
     });
-  }, [safeData, searchQuery, searchFields, safeColumns]);
+  }, [safeData, searchTerm, searchFields, rawColumns, serverSide]);
 
-  // 2. Sorted Data
+  // 2. Client-Side Sorted Data
   const sortedData = useMemo(() => {
-    if (!sortConfig.key) return filteredData;
+    if (serverSide) return filteredData; // Backend handles sorting
+    if (!sortConfig || !sortConfig.key) return filteredData;
 
-    const column = safeColumns.find((c) => (c.key || c.accessor) === sortConfig.key);
-    if (!column) return filteredData;
+    const targetCol = rawColumns.find((c) => (c.key || c.accessor) === sortConfig.key);
 
     return [...filteredData].sort((a, b) => {
-      let valA, valB;
+      let aVal = '';
+      let bVal = '';
 
-      try {
-        if (typeof column.sortAccessor === 'function') {
-          valA = column.sortAccessor(a);
-          valB = column.sortAccessor(b);
-        } else {
-          valA = getCellValue(a, column);
-          valB = getCellValue(b, column);
-        }
-      } catch {
-        valA = '';
-        valB = '';
+      if (targetCol && typeof targetCol.sortAccessor === 'function') {
+        aVal = targetCol.sortAccessor(a);
+        bVal = targetCol.sortAccessor(b);
+      } else {
+        aVal = getCellValue(a, { key: sortConfig.key, accessor: sortConfig.key });
+        bVal = getCellValue(b, { key: sortConfig.key, accessor: sortConfig.key });
       }
 
-      // Handle nulls
-      if (valA === null || valA === undefined) valA = '';
-      if (valB === null || valB === undefined) valB = '';
+      if (aVal === bVal) return 0;
+      if (aVal === null || aVal === undefined) return 1;
+      if (bVal === null || bVal === undefined) return -1;
 
-      // Number comparison
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
-      }
-
-      // Parse string numbers (e.g. monetary amounts or numbers stored as strings)
-      const numA = Number(valA);
-      const numB = Number(valB);
-      if (!isNaN(numA) && !isNaN(numB) && typeof valA !== 'boolean' && typeof valB !== 'boolean' && valA !== '' && valB !== '') {
-        return sortConfig.direction === 'asc' ? numA - numB : numB - numA;
+      // Numeric comparison
+      const aNum = Number(aVal);
+      const bNum = Number(bVal);
+      if (!isNaN(aNum) && !isNaN(bNum) && typeof aVal !== 'boolean') {
+        return sortConfig.direction === 'asc' ? aNum - bNum : bNum - aNum;
       }
 
       // Date comparison
-      const dateA = Date.parse(valA);
-      const dateB = Date.parse(valB);
-      if (!isNaN(dateA) && !isNaN(dateB) && typeof valA === 'string' && (valA.includes('-') || valA.includes('/'))) {
-        return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+      const aDate = new Date(aVal);
+      const bDate = new Date(bVal);
+      if (!isNaN(aDate.getTime()) && !isNaN(bDate.getTime()) && typeof aVal === 'string' && aVal.length > 8) {
+        return sortConfig.direction === 'asc' ? aDate - bDate : bDate - aDate;
       }
 
-      // String comparison
-      const strA = String(valA).toLowerCase();
-      const strB = String(valB).toLowerCase();
-      const comparison = strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
-      return sortConfig.direction === 'asc' ? comparison : -comparison;
+      // Alphabetical comparison
+      const aStr = String(aVal).toLowerCase();
+      const bStr = String(bVal).toLowerCase();
+      return sortConfig.direction === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
     });
-  }, [filteredData, sortConfig, safeColumns]);
+  }, [filteredData, sortConfig, rawColumns, serverSide]);
 
-  // 3. Paginated Data
-  const totalItems = sortedData.length;
-  const totalPages = pagination ? Math.max(1, Math.ceil(totalItems / pageSize)) : 1;
-  const safeCurrentPage = Math.min(currentPage, totalPages);
+  // Total items calculation
+  const effectiveTotalCount = totalCount !== undefined ? totalCount : totalRecords;
+  const totalItems = useMemo(() => {
+    if (serverSide && effectiveTotalCount !== undefined) {
+      return effectiveTotalCount;
+    }
+    return sortedData.length;
+  }, [serverSide, effectiveTotalCount, sortedData.length]);
 
+  // Total pages
+  const totalPages = Math.max(1, Math.ceil(totalItems / activePageSize));
+
+  // Current page boundary safety check
+  const safeCurrentPage = Math.min(Math.max(1, activePage), totalPages);
+
+  // Serial Number column (Sr No) automatically computed per page
+  const safeColumns = useMemo(() => {
+    if (!showSrNo) return rawColumns;
+
+    const hasExistingSr = rawColumns.some(
+      (c) =>
+        c.key === 'srNo' ||
+        c.key === 'sr_no' ||
+        c.key === 'serialNo' ||
+        c.header === 'Sr No' ||
+        c.header === 'Sr. No.' ||
+        c.header === 'Sr No.'
+    );
+    if (hasExistingSr) return rawColumns;
+
+    const srColumn = {
+      key: 'srNo',
+      header: srNoHeader,
+      sortable: false,
+      align: 'center',
+      width: '56px',
+      headerClassName: 'w-12 sm:w-16 text-center text-slate-500 font-medium whitespace-nowrap',
+      className: 'w-12 sm:w-16 text-center tabular-nums text-slate-400 font-mono text-[11px] select-none whitespace-nowrap',
+      render: (_, __, rowIdx) => {
+        const pageNum = Number(safeCurrentPage) || 1;
+        const pageSizeNum = Number(activePageSize) || 10;
+        return (pageNum - 1) * pageSizeNum + rowIdx + 1;
+      },
+    };
+
+    return [srColumn, ...rawColumns];
+  }, [rawColumns, showSrNo, srNoHeader, safeCurrentPage, activePageSize]);
+
+  // 3. Paginated Data Slice
   const paginatedData = useMemo(() => {
     if (!pagination) return sortedData;
-    const startIndex = (safeCurrentPage - 1) * pageSize;
-    return sortedData.slice(startIndex, startIndex + pageSize);
-  }, [sortedData, pagination, safeCurrentPage, pageSize]);
+    if (serverSide) return sortedData; // Backend handles slice
+
+    const startIndex = (safeCurrentPage - 1) * activePageSize;
+    return sortedData.slice(startIndex, startIndex + activePageSize);
+  }, [sortedData, pagination, safeCurrentPage, activePageSize, serverSide]);
 
   // Handlers
   const handleSort = (col) => {
-    if (col.sortable === false) return;
     const key = col.key || col.accessor;
     if (!key) return;
 
-    setSortConfig((prev) => {
-      if (prev.key === key) {
-        if (prev.direction === 'asc') return { key, direction: 'desc' };
-        if (prev.direction === 'desc') return { key: null, direction: 'asc' }; // reset to unsorted
-      }
-      return { key, direction: 'asc' };
-    });
+    let newDirection = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      newDirection = 'desc';
+    }
+
+    const newSort = { key, direction: newDirection };
+
+    if (onSortChange) {
+      onSortChange(newSort);
+    }
+    if (!isControlledSort) {
+      setInternalSort(newSort);
+    }
   };
 
   const handleSearchInputChange = (e) => {
     const val = e.target.value;
-    if (controlledOnSearchChange) {
-      controlledOnSearchChange(val);
-    } else {
-      setInternalSearch(val);
+    setSearchTerm(val);
+    if (!isControlledPage && !serverSide) {
+      setInternalPage(1);
     }
   };
 
   const handleClearSearch = () => {
+    setSearchTerm('');
     if (controlledOnSearchChange) {
       controlledOnSearchChange('');
-    } else {
-      setInternalSearch('');
+    }
+    if (onPageChange) {
+      onPageChange(1);
+    }
+    if (!isControlledPage) {
+      setInternalPage(1);
+    }
+  };
+
+  const handlePageChange = (newPage) => {
+    const clamped = Math.max(1, Math.min(totalPages, newPage));
+    if (onPageChange) {
+      onPageChange(clamped);
+    }
+    if (!isControlledPage) {
+      setInternalPage(clamped);
+    }
+  };
+
+  const handlePageSizeChange = (newSize) => {
+    const sizeNum = Number(newSize) || defaultPageSize;
+    if (onPageSizeChange) {
+      onPageSizeChange(sizeNum);
+    }
+    if (!isControlledPageSize) {
+      setInternalPageSize(sizeNum);
+    }
+    if (onPageChange) {
+      onPageChange(1);
+    }
+    if (!isControlledPage) {
+      setInternalPage(1);
     }
   };
 
@@ -253,28 +355,28 @@ export default function DataTable({
     return rangeWithDots;
   };
 
-  const startIndex = totalItems === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1;
-  const endIndex = Math.min(safeCurrentPage * pageSize, totalItems);
+  const startIndex = totalItems === 0 ? 0 : (safeCurrentPage - 1) * activePageSize + 1;
+  const endIndex = Math.min(safeCurrentPage * activePageSize, totalItems);
 
   return (
-    <div className={`bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs flex flex-col ${containerClassName}`}>
+    <div className={`bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs flex flex-col w-full max-w-full ${containerClassName}`}>
       
       {/* Table Toolbar */}
       {(searchable || toolbarLeft || toolbarRight) && (
-        <div className="p-3.5 bg-slate-50/70 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="p-3 sm:p-3.5 bg-slate-50/70 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 text-xs">
           {/* Left Toolbar (Search or custom filters) */}
-          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[240px]">
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0 w-full sm:w-auto">
             {searchable && (
-              <div className="relative flex-1 max-w-sm min-w-[180px]">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <div className="relative flex-1 min-w-0 w-full sm:max-w-sm">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
-                  value={searchQuery}
+                  value={searchTerm}
                   onChange={handleSearchInputChange}
                   placeholder={searchPlaceholder}
                   className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 focus:border-amber-500 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none transition-colors shadow-2xs"
                 />
-                {searchQuery && (
+                {searchTerm && (
                   <button
                     type="button"
                     onClick={handleClearSearch}
@@ -291,22 +393,22 @@ export default function DataTable({
 
           {/* Right Toolbar */}
           {toolbarRight && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {toolbarRight}
             </div>
           )}
         </div>
       )}
 
-      {/* Table Scroll Area */}
-      <div className="overflow-x-auto w-full">
+      {/* Table Scroll Area with smooth touch scrolling */}
+      <div className="overflow-x-auto w-full no-scrollbar">
         <table className="w-full text-left border-collapse min-w-full">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-semibold text-slate-600 tracking-wide select-none">
               {safeColumns.map((col, idx) => {
                 const key = col.key || col.accessor || idx;
                 const isSortable = col.sortable !== false && (col.key || col.accessor);
-                const isSorted = sortConfig.key === (col.key || col.accessor);
+                const isSorted = sortConfig && sortConfig.key === (col.key || col.accessor);
                 const alignClass = 
                   col.align === 'right' ? 'text-right justify-end' :
                   col.align === 'center' ? 'text-center justify-center' :
@@ -317,14 +419,14 @@ export default function DataTable({
                     key={key}
                     style={col.width ? { width: col.width } : undefined}
                     onClick={() => isSortable && handleSort(col)}
-                    className={`py-3 px-3.5 whitespace-nowrap ${col.headerClassName || ''} ${
+                    className={`py-3 px-3 sm:px-3.5 whitespace-nowrap ${col.headerClassName || ''} ${
                       isSortable ? 'cursor-pointer hover:bg-slate-100/80 transition-colors' : ''
                     }`}
                   >
                     <div className={`flex items-center space-x-1.5 ${alignClass}`}>
                       <span className="font-semibold text-slate-700">{col.header}</span>
                       {isSortable && (
-                        <span className="text-slate-400">
+                        <span className="text-slate-400 shrink-0">
                           {isSorted ? (
                             sortConfig.direction === 'asc' ? (
                               <ChevronUp className="w-3.5 h-3.5 text-amber-600" />
@@ -384,7 +486,7 @@ export default function DataTable({
                       return (
                         <td
                           key={key}
-                          className={`py-3 px-3.5 ${alignClass} ${col.className || ''}`}
+                          className={`py-3 px-3 sm:px-3.5 ${alignClass} ${col.className || ''}`}
                         >
                           {col.render ? col.render(val, row, rowIdx) : (val !== null && val !== undefined ? String(val) : '—')}
                         </td>
@@ -398,18 +500,19 @@ export default function DataTable({
         </table>
       </div>
 
-      {/* Pagination & Footer Controls */}
+      {/* Pagination & Footer Controls - Fully responsive across mobile, tablet, and desktop */}
       {pagination && !loading && totalItems > 0 && (
-        <div className="p-3 bg-slate-50/80 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
+        <div className="p-3 bg-slate-50/80 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
           
           {/* Left: Rows Per Page Selector & Total Counter */}
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap items-center justify-between sm:justify-start gap-2 sm:gap-3 w-full sm:w-auto">
             <div className="flex items-center space-x-1.5">
-              <span className="text-slate-500 font-light">Rows:</span>
+              <span className="text-slate-500 font-light text-[11px] sm:text-xs">Rows:</span>
               <select
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-                className="bg-white text-slate-800 border border-slate-200 focus:border-amber-500 rounded px-2 py-1 text-xs focus:outline-none cursor-pointer"
+                id="datatable-page-size-select"
+                value={activePageSize}
+                onChange={(e) => handlePageSizeChange(e.target.value)}
+                className="bg-white text-slate-800 border border-slate-200 focus:border-amber-500 rounded px-1.5 sm:px-2 py-1 text-xs focus:outline-none cursor-pointer shadow-2xs"
               >
                 {pageSizeOptions.map((opt) => (
                   <option key={opt} value={opt}>
@@ -419,24 +522,24 @@ export default function DataTable({
               </select>
             </div>
 
-            <div className="text-slate-500 font-light border-l border-slate-200 pl-3">
-              Showing <strong className="font-medium text-slate-800 tabular-nums">{startIndex}</strong> to{' '}
+            <div className="text-slate-500 font-light border-l border-slate-200 pl-2 sm:pl-3 text-[11px] sm:text-xs whitespace-nowrap">
+              Showing <strong className="font-medium text-slate-800 tabular-nums">{startIndex}</strong>–
               <strong className="font-medium text-slate-800 tabular-nums">{endIndex}</strong> of{' '}
-              <strong className="font-medium text-slate-800 tabular-nums">{totalItems}</strong> entries
-              {safeData.length !== totalItems && (
-                <span className="text-slate-400 ml-1">(filtered from {safeData.length})</span>
+              <strong className="font-medium text-slate-800 tabular-nums">{totalItems}</strong>
+              {!serverSide && safeData.length !== totalItems && (
+                <span className="text-slate-400 ml-1 hidden sm:inline">(filtered from {safeData.length})</span>
               )}
             </div>
           </div>
 
           {/* Right: Page Navigation Buttons */}
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1 justify-center w-full sm:w-auto shrink-0 whitespace-nowrap">
             {/* First Page */}
             <button
               type="button"
-              onClick={() => setCurrentPage(1)}
+              onClick={() => handlePageChange(1)}
               disabled={safeCurrentPage === 1}
-              className="p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+              className="hidden sm:inline-flex p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
               title="First Page"
             >
               <ChevronsLeft className="w-3.5 h-3.5" />
@@ -445,7 +548,7 @@ export default function DataTable({
             {/* Prev Page */}
             <button
               type="button"
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              onClick={() => handlePageChange(Math.max(1, safeCurrentPage - 1))}
               disabled={safeCurrentPage === 1}
               className="p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
               title="Previous Page"
@@ -458,7 +561,7 @@ export default function DataTable({
               {getPageNumbers().map((item, idx) => {
                 if (item === '...') {
                   return (
-                    <span key={`dots-${idx}`} className="px-1.5 text-slate-400 select-none">
+                    <span key={`dots-${idx}`} className="px-1 text-slate-400 select-none text-xs">
                       …
                     </span>
                   );
@@ -469,7 +572,7 @@ export default function DataTable({
                   <button
                     key={item}
                     type="button"
-                    onClick={() => setCurrentPage(item)}
+                    onClick={() => handlePageChange(item)}
                     className={`min-w-[24px] h-6 px-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
                       isActive
                         ? 'bg-amber-500 text-white shadow-xs font-semibold'
@@ -485,7 +588,7 @@ export default function DataTable({
             {/* Next Page */}
             <button
               type="button"
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              onClick={() => handlePageChange(Math.min(totalPages, safeCurrentPage + 1))}
               disabled={safeCurrentPage === totalPages}
               className="p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
               title="Next Page"
@@ -496,9 +599,9 @@ export default function DataTable({
             {/* Last Page */}
             <button
               type="button"
-              onClick={() => setCurrentPage(totalPages)}
+              onClick={() => handlePageChange(totalPages)}
               disabled={safeCurrentPage === totalPages}
-              className="p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+              className="hidden sm:inline-flex p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
               title="Last Page"
             >
               <ChevronsRight className="w-3.5 h-3.5" />

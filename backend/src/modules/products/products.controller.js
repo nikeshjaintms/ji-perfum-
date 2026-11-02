@@ -2,55 +2,137 @@ import { prisma } from '../../config/prisma.js';
 
 export const getProducts = async (req, res) => {
   try {
-    const { search, categoryId, concentration, isActive, storeId } = req.query;
+    const { search, categoryId, concentration, isActive, storeId, page, limit, sortBy, sortOrder, inStockOnly } = req.query;
 
     const where = {};
 
-    if (isActive !== undefined) {
+    if (isActive !== undefined && isActive !== 'ALL') {
       where.isActive = isActive === 'true';
     }
 
-    if (categoryId) {
+    if (inStockOnly === 'true') {
+      if (storeId) {
+        where.stockBalances = {
+          some: {
+            storeId,
+            quantity: { gt: 0 },
+          },
+        };
+      } else {
+        where.stockQuantity = { gt: 0 };
+      }
+    }
+
+    if (categoryId && categoryId !== 'ALL') {
       where.categoryId = categoryId;
     }
 
-    if (concentration) {
+    if (concentration && concentration !== 'ALL') {
       where.concentration = concentration;
     }
 
-    if (search) {
+    if (search && search.trim()) {
+      const q = search.trim();
       where.OR = [
-        { name: { contains: search } },
-        { sku: { contains: search } },
-        { barcode: { contains: search } },
-        { fragranceNotes: { contains: search } },
+        { name: { contains: q } },
+        { sku: { contains: q } },
+        { barcode: { contains: q } },
+        { fragranceNotes: { contains: q } },
       ];
     }
 
-    const products = await prisma.product.findMany({
-      where,
-      include: {
-        category: true,
-        stockBalances: {
-          include: {
-            store: {
-              include: { city: true },
-            },
+    let orderBy = { name: 'asc' };
+    if (sortBy) {
+      const allowedSort = ['name', 'sku', 'sellingPrice', 'stockQuantity', 'createdAt'];
+      if (allowedSort.includes(sortBy)) {
+        orderBy = { [sortBy]: sortOrder === 'desc' ? 'desc' : 'asc' };
+      }
+    }
+
+    const pageNum = page ? Math.max(1, parseInt(page, 10) || 1) : null;
+    const limitNum = limit ? Math.max(1, parseInt(limit, 10) || 10) : null;
+
+    const include = {
+      category: true,
+      stockBalances: {
+        include: {
+          store: {
+            include: { city: true },
           },
         },
       },
-      orderBy: { name: 'asc' },
-    });
+    };
+
+    if (pageNum && limitNum) {
+      const skip = (pageNum - 1) * limitNum;
+      const take = limitNum;
+
+      const [products, total] = await Promise.all([
+        prisma.product.findMany({
+          where,
+          include,
+          orderBy,
+          take,
+          skip,
+        }),
+        prisma.product.count({ where }),
+      ]);
+
+      // If storeId provided, attach store-specific stock count
+      const mappedProducts = products.map((p) => {
+        const totalChainStock = p.stockBalances && p.stockBalances.length > 0
+          ? p.stockBalances.reduce((sum, b) => sum + Number(b.quantity || 0), 0)
+          : Math.max(0, p.stockQuantity || 0);
+
+        let storeStock = totalChainStock;
+        if (storeId) {
+          const bal = p.stockBalances.find((b) => b.storeId === storeId);
+          storeStock = bal ? bal.quantity : 0;
+        }
+        return {
+          ...p,
+          stockQuantity: totalChainStock,
+          currentStoreStock: storeStock,
+        };
+      });
+
+      return res.json({
+        success: true,
+        count: mappedProducts.length,
+        data: mappedProducts,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      });
+    }
+
+    // Default without pagination (e.g. POS catalog)
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        include,
+        orderBy,
+      }),
+      prisma.product.count({ where }),
+    ]);
 
     // If storeId provided, attach store-specific stock count
     const mappedProducts = products.map((p) => {
-      let storeStock = p.stockQuantity;
+      const totalChainStock = p.stockBalances && p.stockBalances.length > 0
+        ? p.stockBalances.reduce((sum, b) => sum + Number(b.quantity || 0), 0)
+        : Math.max(0, p.stockQuantity || 0);
+
+      let storeStock = totalChainStock;
       if (storeId) {
         const bal = p.stockBalances.find((b) => b.storeId === storeId);
         storeStock = bal ? bal.quantity : 0;
       }
       return {
         ...p,
+        stockQuantity: totalChainStock,
         currentStoreStock: storeStock,
       };
     });
@@ -59,6 +141,12 @@ export const getProducts = async (req, res) => {
       success: true,
       count: mappedProducts.length,
       data: mappedProducts,
+      pagination: {
+        total,
+        page: 1,
+        limit: total,
+        totalPages: 1,
+      },
     });
   } catch (error) {
     console.error('getProducts error:', error);
@@ -99,7 +187,11 @@ export const getProductByBarcodeOrSku = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Product not found with this Barcode/SKU' });
     }
 
-    let storeStock = product.stockQuantity;
+    const totalChainStock = product.stockBalances && product.stockBalances.length > 0
+      ? product.stockBalances.reduce((sum, b) => sum + Number(b.quantity || 0), 0)
+      : Math.max(0, product.stockQuantity || 0);
+
+    let storeStock = totalChainStock;
     if (storeId) {
       const bal = product.stockBalances.find((b) => b.storeId === storeId);
       storeStock = bal ? bal.quantity : 0;
@@ -109,6 +201,7 @@ export const getProductByBarcodeOrSku = async (req, res) => {
       success: true,
       data: {
         ...product,
+        stockQuantity: totalChainStock,
         currentStoreStock: storeStock,
       },
     });
@@ -180,8 +273,12 @@ export const createProduct = async (req, res) => {
       });
 
       // Create stock balance for each active store
+      let calculatedTotal = 0;
       for (const st of stores) {
-        const storeQty = storeStocks && storeStocks[st.id] !== undefined ? Number(storeStocks[st.id]) : Math.floor(initialQty / stores.length);
+        const storeQty = storeStocks && storeStocks[st.id] !== undefined
+          ? Number(storeStocks[st.id])
+          : (initialQty > 0 ? Math.floor(initialQty / stores.length) : 0);
+        calculatedTotal += storeQty;
         await tx.stockBalance.create({
           data: {
             productId: created.id,
@@ -192,7 +289,13 @@ export const createProduct = async (req, res) => {
         });
       }
 
-      return created;
+      // Keep aggregate stockQuantity in sync with the sum of store balances
+      const updatedCreated = await tx.product.update({
+        where: { id: created.id },
+        data: { stockQuantity: calculatedTotal },
+      });
+
+      return updatedCreated;
     });
 
     const fullProduct = await prisma.product.findUnique({
@@ -280,17 +383,235 @@ export const updateProduct = async (req, res) => {
 
 export const getCategories = async (req, res) => {
   try {
-    const categories = await prisma.category.findMany({
-      include: {
-        _count: {
-          select: { products: true },
-        },
+    const { search, page, limit, sortBy, sortOrder } = req.query;
+
+    const where = {};
+    if (search && search.trim()) {
+      const q = search.trim();
+      where.OR = [
+        { name: { contains: q } },
+        { slug: { contains: q } },
+        { description: { contains: q } },
+      ];
+    }
+
+    let orderBy = { name: 'asc' };
+    if (sortBy) {
+      const allowedSort = ['name', 'slug', 'createdAt'];
+      if (allowedSort.includes(sortBy)) {
+        orderBy = { [sortBy]: sortOrder === 'desc' ? 'desc' : 'asc' };
+      }
+    }
+
+    const include = {
+      _count: {
+        select: { products: true },
       },
-      orderBy: { name: 'asc' },
+    };
+
+    const pageNum = page ? Math.max(1, parseInt(page, 10) || 1) : null;
+    const limitNum = limit ? Math.max(1, parseInt(limit, 10) || 10) : null;
+
+    if (pageNum && limitNum) {
+      const skip = (pageNum - 1) * limitNum;
+      const [categories, total] = await Promise.all([
+        prisma.category.findMany({
+          where,
+          include,
+          orderBy,
+          take: limitNum,
+          skip,
+        }),
+        prisma.category.count({ where }),
+      ]);
+
+      return res.json({
+        success: true,
+        count: categories.length,
+        data: categories,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      });
+    }
+
+    const [categories, total] = await Promise.all([
+      prisma.category.findMany({
+        where,
+        include,
+        orderBy,
+      }),
+      prisma.category.count({ where }),
+    ]);
+
+    return res.json({
+      success: true,
+      count: categories.length,
+      data: categories,
+      pagination: {
+        total,
+        page: 1,
+        limit: total,
+        totalPages: 1,
+      },
     });
-    return res.json({ success: true, data: categories });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Failed to fetch categories' });
+    console.error('getCategories error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch categories: ' + error.message });
+  }
+};
+
+export const createCategory = async (req, res) => {
+  try {
+    const { name, slug, description } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Category name is required.' });
+    }
+
+    const cleanName = name.trim();
+    const cleanSlug = (slug && slug.trim())
+      ? slug.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+      : cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+
+    // Check if name or slug already exists
+    const existing = await prisma.category.findFirst({
+      where: {
+        OR: [{ name: cleanName }, { slug: cleanSlug }],
+      },
+    });
+
+    if (existing) {
+      const isNameMatch = existing.name.toLowerCase() === cleanName.toLowerCase();
+      return res.status(409).json({
+        success: false,
+        message: isNameMatch
+          ? `Category '${cleanName}' already exists.`
+          : `Category slug '${cleanSlug}' already exists.`,
+      });
+    }
+
+    const category = await prisma.category.create({
+      data: {
+        name: cleanName,
+        slug: cleanSlug,
+        description: description ? description.trim() : null,
+      },
+      include: {
+        _count: { select: { products: true } },
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `Category '${category.name}' created successfully.`,
+      data: category,
+    });
+  } catch (error) {
+    console.error('createCategory error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to create category: ' + error.message });
+  }
+};
+
+export const updateCategory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, slug, description } = req.body;
+
+    const category = await prisma.category.findUnique({ where: { id } });
+    if (!category) {
+      return res.status(404).json({ success: false, message: 'Category not found.' });
+    }
+
+    const data = {};
+    if (name && name.trim()) {
+      data.name = name.trim();
+    }
+    if (slug && slug.trim()) {
+      data.slug = slug.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    } else if (name && name.trim() && !category.slug) {
+      data.slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    }
+    if (description !== undefined) {
+      data.description = description ? description.trim() : null;
+    }
+
+    // Check uniqueness conflict if name or slug changed
+    if (data.name || data.slug) {
+      const conflict = await prisma.category.findFirst({
+        where: {
+          id: { not: id },
+          OR: [
+            ...(data.name ? [{ name: data.name }] : []),
+            ...(data.slug ? [{ slug: data.slug }] : []),
+          ],
+        },
+      });
+
+      if (conflict) {
+        const isNameConflict = data.name && conflict.name.toLowerCase() === data.name.toLowerCase();
+        return res.status(409).json({
+          success: false,
+          message: isNameConflict
+            ? `Category '${data.name}' already exists.`
+            : `Category slug '${data.slug}' already exists.`,
+        });
+      }
+    }
+
+    const updated = await prisma.category.update({
+      where: { id },
+      data,
+      include: {
+        _count: { select: { products: true } },
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: `Category '${updated.name}' updated successfully.`,
+      data: updated,
+    });
+  } catch (error) {
+    console.error('updateCategory error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update category: ' + error.message });
+  }
+};
+
+export const deleteCategory = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const category = await prisma.category.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { products: true } },
+      },
+    });
+
+    if (!category) {
+      return res.status(404).json({ success: false, message: 'Category not found.' });
+    }
+
+    if (category._count?.products > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete category '${category.name}' because it contains ${category._count.products} linked product(s). Please reassign or delete the products first.`,
+      });
+    }
+
+    await prisma.category.delete({ where: { id } });
+
+    return res.json({
+      success: true,
+      message: `Category '${category.name}' deleted successfully.`,
+    });
+  } catch (error) {
+    console.error('deleteCategory error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to delete category: ' + error.message });
   }
 };
 
@@ -367,4 +688,3 @@ export const adjustStock = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to adjust stock: ' + error.message });
   }
 };
-

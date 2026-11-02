@@ -138,7 +138,7 @@ export default function InvoicePrintModal({ invoice, mode = 'a4', onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
       {/* Dynamic @page CSS based on selected mode */}
       <style>{`
         @media print {
@@ -149,36 +149,36 @@ export default function InvoicePrintModal({ invoice, mode = 'a4', onClose }) {
         }
       `}</style>
 
-      <div className="bg-white border border-slate-200 rounded-3xl max-w-5xl w-full my-6 overflow-hidden shadow-2xl flex flex-col">
+      <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl max-w-5xl w-full my-auto overflow-hidden shadow-2xl flex flex-col max-h-[96vh]">
         
         {/* Top Control Bar (Hidden during Print) */}
-        <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 no-print">
+        <div className="bg-slate-50 p-3 sm:p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 no-print">
           
           {/* Format Tabs */}
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:space-x-2 whitespace-nowrap">
             <button
               onClick={() => setCurrentMode('a4')}
               id="print-tab-a4"
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center space-x-1.5 transition ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center space-x-1.5 transition whitespace-nowrap shrink-0 ${
                 currentMode === 'a4'
-                  ? 'bg-amber-500/10 text-amber-700 border border-amber-300 shadow-sm'
+                  ? 'bg-amber-500/10 text-amber-700 border border-amber-300 shadow-sm font-semibold'
                   : 'bg-transparent text-slate-500 hover:text-slate-900 border border-transparent'
               }`}
             >
-              <FileText className="w-3.5 h-3.5 text-amber-600" />
-              <span>A4 Tax Invoice (Main Invoice)</span>
+              <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="whitespace-nowrap">A4 Tax Invoice (Main Invoice)</span>
             </button>
             <button
               onClick={() => setCurrentMode('thermal')}
               id="print-tab-thermal"
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center space-x-1.5 transition ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center space-x-1.5 transition whitespace-nowrap shrink-0 ${
                 currentMode === 'thermal'
-                  ? 'bg-amber-500/10 text-amber-700 border border-amber-300 shadow-sm'
+                  ? 'bg-amber-500/10 text-amber-700 border border-amber-300 shadow-sm font-semibold'
                   : 'bg-transparent text-slate-500 hover:text-slate-900 border border-transparent'
               }`}
             >
-              <Receipt className="w-3.5 h-3.5 text-amber-600" />
-              <span>80mm Thermal Receipt</span>
+              <Receipt className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="whitespace-nowrap">80mm Thermal Receipt</span>
             </button>
           </div>
 
@@ -218,10 +218,10 @@ export default function InvoicePrintModal({ invoice, mode = 'a4', onClose }) {
             <button
               onClick={handlePrint}
               id="confirm-print-btn"
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-semibold tracking-wide transition shadow-md shadow-amber-950/20 flex items-center space-x-2 cursor-pointer"
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-semibold tracking-wide transition shadow-md shadow-amber-950/20 flex items-center space-x-2 cursor-pointer whitespace-nowrap shrink-0"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>{currentMode === 'a4' ? 'Print A4 Invoice' : 'Print Thermal Receipt'}</span>
+              <Printer className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">{currentMode === 'a4' ? 'Print A4 Invoice' : 'Print Thermal Receipt'}</span>
             </button>
             <button
               onClick={onClose}
@@ -234,7 +234,7 @@ export default function InvoicePrintModal({ invoice, mode = 'a4', onClose }) {
         </div>
 
         {/* Printable View Area */}
-        <div className="p-6 overflow-y-auto max-h-[82vh] flex justify-center bg-slate-100">
+        <div className="p-2 sm:p-6 overflow-y-auto overflow-x-auto max-h-[82vh] flex justify-start sm:justify-center bg-slate-100 no-scrollbar">
           
           {/* ========================================================= */}
           {/* 1. STANDARD TAX INVOICE (A4 Page: 210mm x 297mm) */}

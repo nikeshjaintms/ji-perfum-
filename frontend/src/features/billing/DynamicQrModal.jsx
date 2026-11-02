@@ -81,8 +81,8 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
   const isPartial = currentStatus === 'PARTIALLY_PAID' || creditAmount > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 ">
-      <div className="bg-white border border-slate-200 rounded-lg max-w-lg w-full overflow-hidden shadow-lg relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/50 backdrop-blur-xs overflow-y-auto">
+      <div className="bg-white border border-slate-200 rounded-xl max-w-lg w-full overflow-hidden shadow-2xl relative max-h-[92vh] flex flex-col my-auto">
         
         {/* Modal Header */}
         <div className="bg-slate-50/80 p-5 border-b border-slate-200 flex items-center justify-between">
@@ -113,74 +113,74 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 flex flex-col items-center text-center space-y-4">
+        <div className="p-4 sm:p-6 flex flex-col items-center text-center space-y-3.5 sm:space-y-4 overflow-y-auto no-scrollbar">
           
           {/* Status Badge */}
           {isPaid ? (
-            <div className="w-full bg-emerald-500/10 border border-emerald-500/25 text-slate-600 py-2.5 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>Paid in full</span>
+            <div className="w-full bg-emerald-500/10 border border-emerald-500/25 text-slate-600 py-2.5 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              <span className="whitespace-nowrap">Paid in full</span>
             </div>
           ) : isPartial ? (
-            <div className="w-full bg-amber-500/10 border border-amber-500/25 text-amber-700 py-2 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600" />
-              <span>Part paid. Still due: ₹{creditAmount.toFixed(2)}</span>
+            <div className="w-full bg-amber-500/10 border border-amber-500/25 text-amber-700 py-2 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600 shrink-0" />
+              <span className="whitespace-nowrap">Part paid. Still due: ₹{creditAmount.toFixed(2)}</span>
             </div>
           ) : (
-            <div className="w-full bg-slate-100 border border-slate-200 text-slate-600 py-2 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600" />
-              <span>Waiting for the customer to pay</span>
+            <div className="w-full bg-slate-100 border border-slate-200 text-slate-600 py-2 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600 shrink-0" />
+              <span className="whitespace-nowrap">Waiting for the customer to pay</span>
             </div>
           )}
 
           {/* Split Tender Breakdown Box (if Split or Credit) */}
           {(isSplit || isCredit) && (
             <div className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-left space-y-1.5 text-xs">
-              <div className="text-[11px] text-amber-600 font-semibold flex items-center space-x-1.5 mb-1">
-                <Layers className="w-3 h-3" />
-                <span>How this bill is paid</span>
+              <div className="text-[11px] text-amber-600 font-semibold flex items-center space-x-1.5 mb-1 whitespace-nowrap">
+                <Layers className="w-3 h-3 shrink-0" />
+                <span className="whitespace-nowrap">How this bill is paid</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                 {cashAmount > 0 && (
-                  <div className="p-2 bg-white border border-slate-200 rounded-md">
-                    <span className="text-[11px] text-slate-600 flex items-center justify-center space-x-1">
-                      <Banknote className="w-3 h-3" />
-                      <span>Cash</span>
+                  <div className="p-2 bg-white border border-slate-200 rounded-md whitespace-nowrap">
+                    <span className="text-[11px] text-slate-600 flex items-center justify-center space-x-1 whitespace-nowrap">
+                      <Banknote className="w-3 h-3 shrink-0" />
+                      <span className="whitespace-nowrap">Cash</span>
                     </span>
-                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block">
+                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block whitespace-nowrap">
                       ₹{cashAmount.toFixed(2)}
                     </span>
                   </div>
                 )}
                 {cardAmount > 0 && (
-                  <div className="p-2 bg-white border border-slate-200 rounded-md">
-                    <span className="text-[11px] text-slate-600 flex items-center justify-center space-x-1">
-                      <CreditCard className="w-3 h-3" />
-                      <span>Card</span>
+                  <div className="p-2 bg-white border border-slate-200 rounded-md whitespace-nowrap">
+                    <span className="text-[11px] text-slate-600 flex items-center justify-center space-x-1 whitespace-nowrap">
+                      <CreditCard className="w-3 h-3 shrink-0" />
+                      <span className="whitespace-nowrap">Card</span>
                     </span>
-                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block">
+                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block whitespace-nowrap">
                       ₹{cardAmount.toFixed(2)}
                     </span>
                   </div>
                 )}
                 {upiAmount > 0 && (
-                  <div className="p-2 bg-white border border-slate-200 rounded-md">
-                    <span className="text-[11px] text-amber-700 flex items-center justify-center space-x-1">
-                      <QrCode className="w-3 h-3" />
-                      <span>UPI QR</span>
+                  <div className="p-2 bg-white border border-slate-200 rounded-md whitespace-nowrap">
+                    <span className="text-[11px] text-amber-700 flex items-center justify-center space-x-1 whitespace-nowrap">
+                      <QrCode className="w-3 h-3 shrink-0" />
+                      <span className="whitespace-nowrap">UPI QR</span>
                     </span>
-                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block">
+                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block whitespace-nowrap">
                       ₹{upiAmount.toFixed(2)}
                     </span>
                   </div>
                 )}
                 {creditAmount > 0 && (
-                  <div className="p-2 bg-rose-50 border border-rose-200 rounded-md">
-                    <span className="text-[11px] text-rose-600 flex items-center justify-center space-x-1">
-                      <BookOpen className="w-3 h-3" />
-                      <span>On credit</span>
+                  <div className="p-2 bg-rose-50 border border-rose-200 rounded-md whitespace-nowrap">
+                    <span className="text-[11px] text-rose-600 flex items-center justify-center space-x-1 whitespace-nowrap">
+                      <BookOpen className="w-3 h-3 shrink-0" />
+                      <span className="whitespace-nowrap">On credit</span>
                     </span>
-                    <span className="text-xs font-semibold text-rose-600 tabular-nums mt-0.5 block">
+                    <span className="text-xs font-semibold text-rose-600 tabular-nums mt-0.5 block whitespace-nowrap">
                       ₹{creditAmount.toFixed(2)}
                     </span>
                   </div>
@@ -263,7 +263,7 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
           {/* Cashier Payment Confirmation controls */}
           {!isPaid && (
             <div className="w-full pt-2 border-t border-slate-200 flex flex-col space-y-2">
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   value={utrInput}
@@ -284,21 +284,21 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
           )}
 
           {/* Print Actions */}
-          <div className="w-full pt-3 border-t border-slate-200 grid grid-cols-2 gap-2.5">
+          <div className="w-full pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 whitespace-nowrap">
             <button
               onClick={() => onPrintInvoice(invoiceData)}
-              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md text-xs font-medium flex items-center justify-center space-x-2 border border-slate-200 transition"
+              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md text-xs font-medium flex items-center justify-center space-x-2 border border-slate-200 transition whitespace-nowrap"
             >
-              <Printer className="w-3.5 h-3.5 text-amber-600" />
-              <span>A4 Tax Invoice</span>
+              <Printer className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="whitespace-nowrap">A4 Tax Invoice</span>
             </button>
 
             <button
               onClick={() => onPrintReceipt(invoiceData)}
-              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md text-xs font-medium flex items-center justify-center space-x-2 border border-slate-200 transition"
+              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md text-xs font-medium flex items-center justify-center space-x-2 border border-slate-200 transition whitespace-nowrap"
             >
-              <Receipt className="w-3.5 h-3.5 text-slate-600" />
-              <span>Print receipt</span>
+              <Receipt className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+              <span className="whitespace-nowrap">Print receipt</span>
             </button>
           </div>
 

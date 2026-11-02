@@ -431,34 +431,46 @@ export const createInvoice = async (req, res) => {
 
 export const getInvoices = async (req, res) => {
   try {
-    const { search, status, paymentMethod, storeId, cityId, limit = 50, page = 1 } = req.query;
+    const { search, status, paymentMethod, storeId, cityId, limit = 10, page = 1, sortBy, sortOrder } = req.query;
 
     const where = {};
 
-    if (status) {
+    if (status && status !== 'ALL') {
       where.paymentStatus = status;
     }
 
-    if (paymentMethod) {
+    if (paymentMethod && paymentMethod !== 'ALL') {
       where.paymentMethod = paymentMethod;
     }
 
-    if (storeId) {
+    if (storeId && storeId !== 'ALL') {
       where.storeId = storeId;
-    } else if (cityId) {
+    } else if (cityId && cityId !== 'ALL') {
       where.store = { cityId };
     }
 
-    if (search) {
+    if (search && search.trim()) {
+      const q = search.trim();
       where.OR = [
-        { invoiceNumber: { contains: search } },
-        { customer: { name: { contains: search } } },
-        { customer: { phone: { contains: search } } },
+        { invoiceNumber: { contains: q } },
+        { customer: { name: { contains: q } } },
+        { customer: { phone: { contains: q } } },
+        { customer: { email: { contains: q } } },
+        { store: { name: { contains: q } } },
       ];
     }
 
-    const take = Number(limit);
-    const skip = (Number(page) - 1) * take;
+    let orderBy = { createdAt: 'desc' };
+    if (sortBy) {
+      const allowed = ['createdAt', 'invoiceNumber', 'grandTotal', 'paidAmount', 'dueAmount', 'paymentStatus'];
+      if (allowed.includes(sortBy)) {
+        orderBy = { [sortBy]: sortOrder === 'asc' ? 'asc' : 'desc' };
+      }
+    }
+
+    const take = Math.max(1, parseInt(limit, 10) || 10);
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const skip = (pageNum - 1) * take;
 
     const [invoices, total] = await Promise.all([
       prisma.invoice.findMany({
@@ -470,7 +482,7 @@ export const getInvoices = async (req, res) => {
           items: true,
           payments: true,
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         take,
         skip,
       }),
@@ -482,7 +494,7 @@ export const getInvoices = async (req, res) => {
       data: invoices,
       pagination: {
         total,
-        page: Number(page),
+        page: pageNum,
         limit: take,
         totalPages: Math.ceil(total / take),
       },
