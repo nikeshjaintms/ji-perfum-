@@ -23,8 +23,33 @@ export const removeCookie = (name) => {
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax`;
 };
 
+// Resolve API Base URL from .env (VITE_API_BASE_URL) or default to /api/v1
+const resolveBaseUrl = () => {
+  const envUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
+  if (!envUrl) {
+    return '/api/v1';
+  }
+  const cleanUrl = envUrl.replace(/\/+$/, '');
+  if (cleanUrl.endsWith('/api/v1')) {
+    return cleanUrl;
+  }
+  return `${cleanUrl}/api/v1`;
+};
+
+export const API_BASE_URL = resolveBaseUrl();
+
+// Helper to construct absolute PDF invoice URL for browser downloads and WhatsApp sharing
+export const getInvoicePdfUrl = (invoiceId) => {
+  if (!invoiceId) return '';
+  if (API_BASE_URL.startsWith('http://') || API_BASE_URL.startsWith('https://')) {
+    return `${API_BASE_URL}/billing/${invoiceId}/pdf`;
+  }
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  return `${origin}${API_BASE_URL}/billing/${invoiceId}/pdf`;
+};
+
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },

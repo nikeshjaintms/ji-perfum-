@@ -20,7 +20,7 @@ import {
   FileDown
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { paymentService, billingService } from '../../services/api';
+import { paymentService, billingService, getInvoicePdfUrl } from '../../services/api';
 
 export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, onPrintReceipt }) {
   const [copied, setCopied] = useState(false);
@@ -116,16 +116,14 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
   const getDirectWhatsAppUrl = () => {
     if (whatsappState?.whatsappUrl) return whatsappState.whatsappUrl;
     if (!cleanPhone) return null;
-    const backendBase = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000';
-    const pdfUrl = `${backendBase}/api/v1/billing/${invoiceData.id}/pdf`;
+    const pdfUrl = getInvoicePdfUrl(invoiceData.id);
     const text = `✨ *JJ PERFUME - TAX INVOICE* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nDear *${customerName}*,\nThank you for shopping at *JJ PERFUME*!\n\n🧾 *Bill Number:* ${invoiceData.invoiceNumber}\n💰 *Grand Total:* ₹${grandTotal.toFixed(2)}\n💳 *Payment:* ${invoiceData.paymentMethod || 'UPI QR'} · *${isPaid ? 'PAID IN FULL ✅' : 'PARTIALLY PAID ⏳'}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📄 *Download Official PDF Invoice:*\n${pdfUrl}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📍 Outlet: JJ PERFUME, Mandvi\nWe hope you love your fragrance! Visit us again soon. 🌸`;
     return `https://api.whatsapp.com/send?phone=91${cleanPhone}&text=${encodeURIComponent(text)}`;
   };
 
   const handleOpenWhatsAppWithPdf = () => {
     try {
-      const backendBase = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000';
-      const pdfUrl = `${backendBase}/api/v1/billing/${invoiceData.id}/pdf`;
+      const pdfUrl = getInvoicePdfUrl(invoiceData.id);
       
       // Auto-download PDF so cashier has it ready to attach in WhatsApp
       const link = document.createElement('a');
@@ -420,7 +418,7 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
           {/* Print & PDF Actions */}
           <div className="w-full pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-2 whitespace-nowrap">
             <a
-              href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000'}/api/v1/billing/${invoiceData.id}/pdf`}
+              href={getInvoicePdfUrl(invoiceData.id)}
               target="_blank"
               rel="noopener noreferrer"
               className="py-2.5 px-3 bg-slate-900 hover:bg-black text-amber-400 hover:text-amber-300 rounded-md text-xs font-semibold flex items-center justify-center space-x-1.5 transition shadow-xs whitespace-nowrap"

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Printer, Receipt, FileText, MapPin, MessageCircle, Send, RefreshCw, Check, FileDown } from 'lucide-react';
 import QRCode from 'qrcode';
 import { numberToWords } from '../../utils/numberToWords';
-import { billingService } from '../../services/api';
+import { billingService, getInvoicePdfUrl } from '../../services/api';
 
 export default function InvoicePrintModal({ invoice, mode = 'a4', onClose }) {
   const [currentMode, setCurrentMode] = useState(mode); // 'a4' or 'thermal'
@@ -224,8 +224,7 @@ export default function InvoicePrintModal({ invoice, mode = 'a4', onClose }) {
                 onClick={async () => {
                   const raw = (invoice.customer?.phone || '').replace(/\D/g, '').slice(-10);
                   if (raw) {
-                    const backendBase = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000';
-                    const pdfUrl = `${backendBase}/api/v1/billing/${invoice.id}/pdf`;
+                    const pdfUrl = getInvoicePdfUrl(invoice.id);
                     const customerName = invoice.customer?.name || 'Customer';
                     const text = `✨ *${storeName.toUpperCase()} - TAX INVOICE* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nDear *${customerName}*,\nThank you for shopping at *${storeName}*!\n\n🧾 *Bill Number:* ${invoice.invoiceNumber}\n💰 *Grand Total:* ₹${finalNet}\n💳 *Payment:* ${paymentMethodLabel} · *${invoice.paymentStatus}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📄 *Download Official PDF Invoice:*\n${pdfUrl}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📍 Outlet: ${storeName}, ${cityText}\nWe hope you love your fragrance! Visit us again soon. 🌸`;
 
@@ -263,7 +262,7 @@ export default function InvoicePrintModal({ invoice, mode = 'a4', onClose }) {
             )}
 
             <a
-              href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000'}/api/v1/billing/${invoice.id}/pdf`}
+              href={getInvoicePdfUrl(invoice.id)}
               target="_blank"
               rel="noopener noreferrer"
               className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-full text-xs font-semibold tracking-wide transition shadow-sm flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
