@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShoppingCart,
   X,
@@ -11,7 +11,11 @@ import {
   RotateCcw,
   RefreshCw,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  User,
+  Phone,
+  MessageCircle,
+  Check
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 
@@ -59,6 +63,8 @@ export default function NewBillModal({
     handleCheckout,
   } = useCart();
 
+  const [touched, setTouched] = useState({ name: false, phone: false });
+
   // Close on Escape key
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -82,13 +88,60 @@ export default function NewBillModal({
 
   const inr = (n) => `₹${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  // Name validation
+  const nameTrimmed = (customer.name || '').trim();
+  const isNameValid = nameTrimmed.length >= 2 && /^[a-zA-Z\s'.\-]+$/.test(nameTrimmed);
+  const nameError = touched.name && !nameTrimmed
+    ? 'Customer name is required'
+    : touched.name && nameTrimmed.length < 2
+    ? 'Minimum 2 characters'
+    : touched.name && !/^[a-zA-Z\s'.\-]+$/.test(nameTrimmed)
+    ? 'Letters and spaces only'
+    : '';
+
+  // Phone validation
+  const rawDigits = (customer.phone || '').replace(/\D/g, '');
+  const cleanPhone = rawDigits.length === 11 && rawDigits.startsWith('0')
+    ? rawDigits.slice(1)
+    : rawDigits.length === 12 && rawDigits.startsWith('91')
+    ? rawDigits.slice(2)
+    : rawDigits;
+  const isPhoneValid = cleanPhone.length === 10 && /^[6-9]/.test(cleanPhone);
+  const phoneError = touched.phone && !cleanPhone
+    ? 'Phone number is required'
+    : touched.phone && (cleanPhone.length !== 10 || !/^[6-9]/.test(cleanPhone))
+    ? 'Valid 10-digit mobile number starting with 6-9 required'
+    : '';
+
+  const handleNameChange = (e) => {
+    const val = e.target.value.replace(/[^a-zA-Z\s'.\-]/g, '');
+    setCustomer({ ...customer, name: val });
+  };
+
+  const handlePhoneChange = (e) => {
+    let digits = e.target.value.replace(/\D/g, '');
+    if (digits.length > 10) {
+      if (digits.startsWith('91') && digits.length === 12) {
+        digits = digits.slice(2);
+      } else if (digits.startsWith('0') && digits.length === 11) {
+        digits = digits.slice(1);
+      } else {
+        digits = digits.slice(0, 10);
+      }
+    }
+    setCustomer({ ...customer, phone: digits });
+  };
+
   const checkoutBlocked =
     isSubmitting ||
     cart.length === 0 ||
+    !isNameValid ||
+    !isPhoneValid ||
     (paymentMethod === 'SPLIT' && (Math.abs(splitRemaining) > 0.05 || splitTotalAllocated <= 0));
 
   const checkoutLabel = (() => {
     if (isSubmitting) return 'Saving bill…';
+    if (!isNameValid || !isPhoneValid) return 'Enter name & phone to checkout';
     if (paymentMethod === 'UPI_QR') return `Show QR · ${inr(grandTotal)}`;
     if (paymentMethod === 'CREDIT') return `Save on credit · ${inr(grandTotal)} due`;
     if (paymentMethod === 'SPLIT') {
@@ -121,6 +174,10 @@ export default function NewBillModal({
     'w-full px-2.5 py-1.5 bg-white border border-slate-300 focus:border-amber-500 rounded-md text-sm text-slate-900 placeholder-slate-400 focus:outline-none';
 
   const onSubmit = () => {
+    if (!isNameValid || !isPhoneValid) {
+      setTouched({ name: true, phone: true });
+      return;
+    }
     handleCheckout(selectedStore, onInvoiceCreated);
   };
 
@@ -182,23 +239,87 @@ export default function NewBillModal({
             {selectedStore?.name}{selectedStore?.city?.name ? `, ${selectedStore.city.name}` : ''} · {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
-            <input
-              type="text"
-              value={customer.name}
-              onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-              aria-label="Customer name"
-              placeholder="Customer name"
-              className={fieldClass}
-            />
-            <input
-              type="tel"
-              value={customer.phone}
-              onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
-              aria-label="Customer phone"
-              placeholder="Phone"
-              className={fieldClass}
-            />
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-slate-800">Customer Details</span>
+              <span className="text-[11px] text-emerald-800 flex items-center gap-1 font-medium bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                <MessageCircle className="w-3 h-3 text-emerald-600" />
+                WhatsApp Bill
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Customer Name */}
+              <div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                    <User className="w-3.5 h-3.5" />
+                  </div>
+                  <input
+                    type="text"
+                    value={customer.name}
+                    onChange={handleNameChange}
+                    onBlur={() => setTouched((p) => ({ ...p, name: true }))}
+                    aria-label="Customer name"
+                    placeholder="Customer name *"
+                    className={`w-full pl-8 pr-7 py-1.5 bg-white border rounded-md text-sm text-slate-900 placeholder-slate-400 focus:outline-none transition ${
+                      nameError
+                        ? 'border-rose-500 focus:border-rose-600 bg-rose-50/20 ring-1 ring-rose-400/40'
+                        : isNameValid
+                        ? 'border-emerald-500 focus:border-emerald-600'
+                        : 'border-slate-300 focus:border-amber-500'
+                    }`}
+                  />
+                  {isNameValid && (
+                    <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-emerald-600">
+                      <Check className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+                </div>
+                {nameError && (
+                  <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-medium">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <span>{nameError}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Customer Phone */}
+              <div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                    <Phone className="w-3.5 h-3.5" />
+                  </div>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    value={customer.phone}
+                    onChange={handlePhoneChange}
+                    onBlur={() => setTouched((p) => ({ ...p, phone: true }))}
+                    aria-label="Customer phone"
+                    placeholder="10-digit Phone *"
+                    className={`w-full pl-8 pr-7 py-1.5 bg-white border rounded-md text-sm text-slate-900 placeholder-slate-400 focus:outline-none transition tabular-nums ${
+                      phoneError
+                        ? 'border-rose-500 focus:border-rose-600 bg-rose-50/20 ring-1 ring-rose-400/40'
+                        : isPhoneValid
+                        ? 'border-emerald-500 focus:border-emerald-600'
+                        : 'border-slate-300 focus:border-amber-500'
+                    }`}
+                  />
+                  {isPhoneValid && (
+                    <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-emerald-600">
+                      <Check className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+                </div>
+                {phoneError && (
+                  <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-medium">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <span>{phoneError}</span>
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="slip-rule my-4" />

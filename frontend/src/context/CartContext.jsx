@@ -237,6 +237,38 @@ export function CartProvider({ children }) {
         return;
       }
 
+      // Customer Name & Phone Validation
+      const trimmedName = (customer.name || '').trim();
+      if (!trimmedName) {
+        setErrorMsg('Please enter customer name.');
+        return;
+      }
+      if (trimmedName.length < 2) {
+        setErrorMsg('Customer name must be at least 2 characters.');
+        return;
+      }
+      if (!/^[a-zA-Z\s'.\-]+$/.test(trimmedName)) {
+        setErrorMsg('Customer name should only contain letters and spaces.');
+        return;
+      }
+
+      const rawDigits = (customer.phone || '').replace(/\D/g, '');
+      let finalPhone = rawDigits;
+      if (rawDigits.length === 11 && rawDigits.startsWith('0')) {
+        finalPhone = rawDigits.slice(1);
+      } else if (rawDigits.length === 12 && rawDigits.startsWith('91')) {
+        finalPhone = rawDigits.slice(2);
+      }
+
+      if (!finalPhone) {
+        setErrorMsg('Please enter customer mobile number for WhatsApp bill.');
+        return;
+      }
+      if (finalPhone.length !== 10 || !/^[6-9]/.test(finalPhone)) {
+        setErrorMsg('Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.');
+        return;
+      }
+
       if (paymentMethod === 'SPLIT') {
         if (Math.abs(splitRemaining) > 0.05) {
           setErrorMsg(`The split has to add up to the bill total. ₹${splitRemaining.toFixed(2)} is still unassigned.`);
@@ -244,15 +276,6 @@ export function CartProvider({ children }) {
         }
         if (splitTotalAllocated <= 0) {
           setErrorMsg('Enter the amount for each way the customer is paying.');
-          return;
-        }
-        if (numSplitCredit > 0 && !customer.name?.trim() && !customer.phone?.trim()) {
-          setErrorMsg('Add the customer’s name or phone to record the amount on credit.');
-          return;
-        }
-      } else if (paymentMethod === 'CREDIT') {
-        if (!customer.name?.trim() && !customer.phone?.trim()) {
-          setErrorMsg('Add the customer’s name or phone to bill on credit.');
           return;
         }
       }
@@ -263,7 +286,11 @@ export function CartProvider({ children }) {
 
         const payload = {
           storeId: selectedStore?.id,
-          customerData: (customer.phone || customer.name) ? customer : null,
+          customerData: {
+            name: trimmedName,
+            phone: finalPhone,
+            email: customer.email?.trim() || null,
+          },
           items: cart.map((item) => ({
             productId: item.product.id,
             quantity: item.quantity,

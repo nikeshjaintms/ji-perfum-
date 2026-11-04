@@ -49,6 +49,11 @@ export const login = async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { email },
+      include: {
+        assignedStore: {
+          include: { city: true },
+        },
+      },
     });
 
     if (!user || !user.isActive) {
@@ -79,6 +84,8 @@ export const login = async (req, res) => {
           name: user.name,
           email: user.email,
           role: user.role,
+          assignedStoreId: user.assignedStoreId,
+          assignedStore: user.assignedStore,
         },
       },
     });
@@ -89,70 +96,10 @@ export const login = async (req, res) => {
 };
 
 export const register = async (req, res) => {
-  try {
-    const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
-    const email = typeof req.body.email === 'string' ? req.body.email.toLowerCase().trim() : '';
-    const password = typeof req.body.password === 'string' ? req.body.password.trim() : '';
-    const role = req.body.role || 'CASHIER';
-
-    if (!name || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Name, email and password are required.' });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
-    }
-
-    const existing = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (existing) {
-      return res.status(400).json({ success: false, message: 'An account with this email already exists.' });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const validRoles = ['SUPER_ADMIN', 'STORE_MANAGER', 'CASHIER', 'VIEWER'];
-    const assignedRole = validRoles.includes(role) ? role : 'CASHIER';
-
-    const defaultStore = await prisma.store.findFirst({ where: { isActive: true } });
-
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        passwordHash,
-        role: assignedRole,
-        assignedStoreId: defaultStore ? defaultStore.id : null,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-      },
-    });
-
-    // Registration successful: do not issue token/cookies so user must sign in on the login page
-    return res.status(201).json({
-      success: true,
-      message: 'Account registered successfully. Please sign in with your credentials.',
-      data: {
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-        },
-      },
-    });
-  } catch (error) {
-    console.error('Register error:', error);
-    return res.status(500).json({ success: false, message: error.message || 'Internal server error' });
-  }
+  return res.status(403).json({
+    success: false,
+    message: 'Public self-registration is disabled. Staff accounts must be created by an administrator in the Staff Master.',
+  });
 };
 
 export const logout = async (req, res) => {

@@ -17,7 +17,8 @@ import {
   Wallet,
   X,
   AlertCircle,
-  ArrowRight
+  ArrowRight,
+  MessageCircle
 } from 'lucide-react';
 import { billingService } from '../../services/api';
 
@@ -382,6 +383,24 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
               >
                 <QrCode className="w-3 h-3 text-amber-600" />
                 <span>Scan QR</span>
+              </button>
+            )}
+
+            {inv.customer?.phone && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const clean = (inv.customer.phone || '').replace(/\D/g, '').slice(-10);
+                  if (clean) {
+                    const text = `*JJ PERFUME - INVOICE ${inv.invoiceNumber}*\nDear ${inv.customer.name || 'Customer'},\nThank you for shopping at JJ Perfume!\nGrand Total: ₹${Number(inv.grandTotal).toFixed(2)} (${inv.paymentStatus})\nVisit us again soon! 🌸`;
+                    window.open(`https://api.whatsapp.com/send?phone=91${clean}&text=${encodeURIComponent(text)}`, '_blank');
+                    billingService.sendWhatsApp(inv.id).catch(() => {});
+                  }
+                }}
+                className="p-1.5 text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition cursor-pointer"
+                title={`Send bill to WhatsApp (+91 ${inv.customer.phone})`}
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
               </button>
             )}
 

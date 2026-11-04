@@ -8,10 +8,11 @@ import {
   X, 
   RefreshCw, 
   ShoppingCart, 
-  ArrowRight,
-  Plus,
-  Trash2,
-  CheckCircle2
+  ArrowRight, 
+  Plus, 
+  Trash2, 
+  CheckCircle2,
+  Store
 } from 'lucide-react';
 import { productService } from '../../services/api';
 import { useCart } from '../../context/CartContext';
@@ -454,6 +455,25 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
 
   return (
     <div className="max-w-[1700px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+      
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-2xl font-serif font-semibold text-slate-900">Billing</h2>
+            {selectedStore && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-900 border border-amber-200">
+                <Store className="w-3 h-3 text-amber-600 shrink-0" />
+                <span>{selectedStore.name}{selectedStore.city?.name ? ` (${selectedStore.city.name})` : ''}</span>
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-slate-500 mt-1 max-w-2xl">
+            Point of sale counter. Add items by barcode or catalog, review bills, and collect payments.
+          </p>
+        </div>
+      </div>
+
       <div className="w-full">
         {/* Fragrance Catalog */}
         <section className="w-full min-w-0">

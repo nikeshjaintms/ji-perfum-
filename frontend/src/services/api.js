@@ -205,6 +205,10 @@ export const billingService = {
     const res = await api.post(`/billing/${id}/collect-due`, payload);
     return res.data;
   },
+  sendWhatsApp: async (id) => {
+    const res = await api.post(`/billing/${id}/send-whatsapp`);
+    return res.data;
+  },
 };
 
 export const paymentService = {

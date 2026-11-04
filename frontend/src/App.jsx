@@ -6,6 +6,7 @@ import InvoicesListView from './features/invoices/InvoicesListView';
 import InvoicePrintModal from './features/invoices/InvoicePrintModal';
 import ProductsView from './features/products/ProductsView';
 import CategoriesView from './features/categories/CategoriesView';
+import OutletsView from './features/outlets/OutletsView';
 import UsersView from './features/users/UsersView';
 import LoginModal from './features/auth/LoginModal';
 import ChangePasswordModal from './features/auth/ChangePasswordModal';
@@ -60,7 +61,10 @@ export default function App() {
           const storeRes = await storeService.getStores();
           if (storeRes.data?.length > 0 && isMounted) {
             setStores(storeRes.data);
-            const defaultStore = storeRes.data.find((s) => s.city?.name === 'Mandvi') || storeRes.data[0];
+            const userStore = meRes.data.user?.assignedStoreId
+              ? storeRes.data.find((s) => s.id === meRes.data.user.assignedStoreId)
+              : null;
+            const defaultStore = userStore || storeRes.data.find((s) => s.city?.name === 'Mandvi') || storeRes.data[0];
             setSelectedStore(defaultStore);
           }
         } else if (isMounted) {
@@ -90,7 +94,10 @@ export default function App() {
       const storeRes = await storeService.getStores();
       if (storeRes.data?.length > 0) {
         setStores(storeRes.data);
-        const defaultStore = storeRes.data.find((s) => s.city?.name === 'Mandvi') || storeRes.data[0];
+        const userStore = user?.assignedStoreId
+          ? storeRes.data.find((s) => s.id === user.assignedStoreId)
+          : null;
+        const defaultStore = userStore || storeRes.data.find((s) => s.city?.name === 'Mandvi') || storeRes.data[0];
         setSelectedStore(defaultStore);
       }
     } catch (err) {
@@ -223,6 +230,20 @@ export default function App() {
           ) : (
             <div className="py-24 text-center text-sm text-slate-500">
               Access to Category Master is restricted to Store Managers and Owners.
+            </div>
+          )
+        )}
+
+        {activeTab === 'outlets' && (
+          (currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'STORE_MANAGER') ? (
+            <OutletsView
+              onStoreCreated={(newStore) => {
+                refreshStores(newStore);
+              }}
+            />
+          ) : (
+            <div className="py-24 text-center text-sm text-slate-500">
+              Access to Outlet & City Master is restricted to Store Managers and Owners.
             </div>
           )
         )}

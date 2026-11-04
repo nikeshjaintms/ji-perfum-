@@ -44,3 +44,7 @@ Thumbs.db
 # Local Database Backups & Dumps
 *.sql
 *.sqlite
+
+# Local Generated Invoice PDFs
+invoices/
+backend/invoices/

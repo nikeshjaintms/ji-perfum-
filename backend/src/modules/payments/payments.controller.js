@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import { prisma } from '../../config/prisma.js';
+import { sendWhatsAppInvoice } from '../../services/whatsapp.service.js';
 
 export const getInvoicePaymentDetails = async (req, res) => {
   try {
@@ -136,14 +137,37 @@ export const confirmPayment = async (req, res) => {
       });
     });
 
+    // Fetch updated invoice for WhatsApp receipt dispatch
+    const updatedInvoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        customer: true,
+        store: { include: { city: true } },
+        items: true,
+        payments: true,
+      },
+    });
+
+    // Send WhatsApp bill to the customer upon payment success
+    let whatsappResult = null;
+    if (updatedInvoice) {
+      try {
+        whatsappResult = await sendWhatsAppInvoice(updatedInvoice);
+      } catch (wsErr) {
+        console.warn('WhatsApp invoice dispatch error:', wsErr.message);
+      }
+    }
+
     return res.json({
       success: true,
       message: 'Payment confirmed successfully!',
       data: {
         invoiceId,
         invoiceNumber: invoice.invoiceNumber,
-        paymentStatus: 'PAID',
+        paymentStatus: updatedInvoice?.paymentStatus || 'PAID',
         transactionReference: ref,
+        whatsapp: whatsappResult,
+        invoice: updatedInvoice,
       },
     });
   } catch (error) {

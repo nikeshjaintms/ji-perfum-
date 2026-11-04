@@ -13,10 +13,14 @@ import {
   Banknote,
   CreditCard,
   Layers,
-  BookOpen
+  BookOpen,
+  MessageCircle,
+  Send,
+  RefreshCw,
+  FileDown
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { paymentService } from '../../services/api';
+import { paymentService, billingService } from '../../services/api';
 
 export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, onPrintReceipt }) {
   const [copied, setCopied] = useState(false);
@@ -24,6 +28,9 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
   const [utrInput, setUtrInput] = useState('');
   const [currentStatus, setCurrentStatus] = useState(invoiceData?.paymentStatus || 'PENDING');
   const [txRef, setTxRef] = useState(invoiceData?.payment?.transactionReference || '');
+  const [whatsappState, setWhatsappState] = useState(invoiceData?.whatsapp || null);
+  const [isSendingWa, setIsSendingWa] = useState(false);
+  const [waFeedback, setWaFeedback] = useState('');
 
   if (!invoiceData) return null;
 
@@ -62,18 +69,81 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
       if (res.success) {
         setCurrentStatus(res.data.paymentStatus || 'PAID');
         setTxRef(res.data.transactionReference);
+        if (res.data.whatsapp) {
+          setWhatsappState(res.data.whatsapp);
+        }
         confetti({
           particleCount: 80,
           spread: 70,
           origin: { y: 0.6 },
           colors: ['#0A47E5', '#00A3FF', '#E5C07B', '#10B981'],
         });
+
+        window.dispatchEvent(new CustomEvent('catalog:refresh'));
+        window.dispatchEvent(new CustomEvent('invoices:refresh'));
       }
     } catch (err) {
       console.error('Failed to confirm payment:', err);
       alert('Failed to update payment status: ' + (err.response?.data?.message || err.message));
     } finally {
       setIsConfirming(false);
+    }
+  };
+
+  const handleResendWhatsApp = async () => {
+    try {
+      setIsSendingWa(true);
+      setWaFeedback('');
+      const res = await billingService.sendWhatsApp(invoiceData.id);
+      if (res.success && res.data) {
+        setWhatsappState(res.data);
+        setWaFeedback('Bill sent to WhatsApp!');
+        setTimeout(() => setWaFeedback(''), 4000);
+      }
+    } catch (err) {
+      console.error('WhatsApp re-send error:', err);
+      setWaFeedback('Could not send via API');
+      setTimeout(() => setWaFeedback(''), 4000);
+    } finally {
+      setIsSendingWa(false);
+    }
+  };
+
+  const customerPhone = invoiceData.customer?.phone || invoiceData.customerPhone || '';
+  const customerName = invoiceData.customer?.name || 'Customer';
+  const cleanPhone = customerPhone.replace(/\D/g, '').slice(-10);
+
+  const getDirectWhatsAppUrl = () => {
+    if (whatsappState?.whatsappUrl) return whatsappState.whatsappUrl;
+    if (!cleanPhone) return null;
+    const backendBase = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000';
+    const pdfUrl = `${backendBase}/api/v1/billing/${invoiceData.id}/pdf`;
+    const text = `✨ *JJ PERFUME - TAX INVOICE* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nDear *${customerName}*,\nThank you for shopping at *JJ PERFUME*!\n\n🧾 *Bill Number:* ${invoiceData.invoiceNumber}\n💰 *Grand Total:* ₹${grandTotal.toFixed(2)}\n💳 *Payment:* ${invoiceData.paymentMethod || 'UPI QR'} · *${isPaid ? 'PAID IN FULL ✅' : 'PARTIALLY PAID ⏳'}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📄 *Download Official PDF Invoice:*\n${pdfUrl}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📍 Outlet: JJ PERFUME, Mandvi\nWe hope you love your fragrance! Visit us again soon. 🌸`;
+    return `https://api.whatsapp.com/send?phone=91${cleanPhone}&text=${encodeURIComponent(text)}`;
+  };
+
+  const handleOpenWhatsAppWithPdf = () => {
+    try {
+      const backendBase = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000';
+      const pdfUrl = `${backendBase}/api/v1/billing/${invoiceData.id}/pdf`;
+      
+      // Auto-download PDF so cashier has it ready to attach in WhatsApp
+      const link = document.createElement('a');
+      link.href = pdfUrl;
+      link.download = `JJ-Perfume-Invoice-${invoiceData.invoiceNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Open WhatsApp chat
+      const directUrl = getDirectWhatsAppUrl();
+      if (directUrl) {
+        window.open(directUrl, '_blank');
+      }
+      setWaFeedback('PDF downloaded & WhatsApp opened! You can attach the PDF in chat.');
+      setTimeout(() => setWaFeedback(''), 6000);
+    } catch (e) {
+      console.warn('PDF download error:', e);
     }
   };
 
@@ -283,11 +353,86 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
             </div>
           )}
 
-          {/* Print Actions */}
-          <div className="w-full pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 whitespace-nowrap">
+          {/* WhatsApp Bill Dispatch Status & Action */}
+          {isPaid && cleanPhone && (
+            <div className={`w-full p-3.5 rounded-xl border flex flex-col sm:flex-row items-center justify-between gap-3 text-left transition ${
+              whatsappState?.success
+                ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                : 'bg-amber-50/80 border-amber-300 text-amber-950'
+            }`}>
+              <div className="flex items-center space-x-2.5">
+                <div className={`p-2 rounded-full shadow-xs shrink-0 text-white ${
+                  whatsappState?.success ? 'bg-emerald-600' : 'bg-amber-600'
+                }`}>
+                  <MessageCircle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold flex items-center gap-1.5">
+                    <span>{whatsappState?.success ? 'Bill Auto-Sent to WhatsApp' : 'WhatsApp Delivery'}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                      whatsappState?.success ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
+                    }`}>
+                      {whatsappState?.success ? 'Delivered / Queued' : 'Gateway Status'}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] mt-0.5 opacity-90">
+                    To: <strong className="font-semibold">+91 {cleanPhone}</strong> ({customerName})
+                  </p>
+                  {whatsappState?.message && (
+                    <p className={`text-[10px] font-medium mt-0.5 ${
+                      whatsappState?.success ? 'text-emerald-700' : 'text-rose-700'
+                    }`}>
+                      {whatsappState.message}
+                    </p>
+                  )}
+                  {waFeedback && (
+                    <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">{waFeedback}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {getDirectWhatsAppUrl() && (
+                  <button
+                    type="button"
+                    onClick={handleOpenWhatsAppWithPdf}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer whitespace-nowrap"
+                    title="Downloads PDF Bill & Opens WhatsApp chat"
+                  >
+                    <Send className="w-3 h-3 text-white" />
+                    <span>Send on WhatsApp</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleResendWhatsApp}
+                  disabled={isSendingWa}
+                  className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  title="Trigger auto-send via API"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSendingWa ? 'animate-spin' : ''}`} />
+                  <span>{isSendingWa ? 'Sending…' : 'Retry API'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Print & PDF Actions */}
+          <div className="w-full pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-2 whitespace-nowrap">
+            <a
+              href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000'}/api/v1/billing/${invoiceData.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="py-2.5 px-3 bg-slate-900 hover:bg-black text-amber-400 hover:text-amber-300 rounded-md text-xs font-semibold flex items-center justify-center space-x-1.5 transition shadow-xs whitespace-nowrap"
+              title="Download or view official A4 Tax Invoice PDF"
+            >
+              <FileDown className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">Download PDF Bill</span>
+            </a>
+
             <button
               onClick={() => onPrintInvoice(invoiceData)}
-              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md text-xs font-medium flex items-center justify-center space-x-2 border border-slate-200 transition whitespace-nowrap"
+              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md text-xs font-medium flex items-center justify-center space-x-1.5 border border-slate-200 transition whitespace-nowrap"
             >
               <Printer className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <span className="whitespace-nowrap">A4 Tax Invoice</span>

@@ -3,8 +3,8 @@ import { X, MapPin, Building2, Plus, CheckCircle2, AlertCircle, Phone, FileText 
 import { storeService } from '../services/api';
 import statesAndCitiesData from '../data/statesAndCities.json';
 
-export default function AddOutletModal({ onClose, onStoreCreated }) {
-  const [activeTab, setActiveTab] = useState('city'); // 'city' | 'store'
+export default function AddOutletModal({ onClose, onStoreCreated, onCityCreated, initialTab = 'store' }) {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [cities, setCities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -327,6 +327,9 @@ export default function AddOutletModal({ onClose, onStoreCreated }) {
         setJurisdiction('');
         setCityErrors({});
         setCityTouched({});
+        if (onCityCreated) {
+          onCityCreated(res.data);
+        }
         await fetchCities();
         setStoreState(stateName.trim());
         setStoreStateCode(stateCode.trim());

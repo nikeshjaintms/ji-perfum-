@@ -3,12 +3,21 @@ import { prisma } from '../../config/prisma.js';
 
 export const getUsers = async (req, res) => {
   try {
-    const { search, role, page, limit, sortBy, sortOrder } = req.query;
+    const { search, role, storeId, assignedStoreId, page, limit, sortBy, sortOrder } = req.query;
 
     const where = {};
 
     if (role && role !== 'ALL') {
       where.role = role;
+    }
+
+    const filterStore = storeId || assignedStoreId;
+    if (filterStore && filterStore !== 'ALL') {
+      if (filterStore === 'UNASSIGNED') {
+        where.assignedStoreId = null;
+      } else {
+        where.assignedStoreId = filterStore;
+      }
     }
 
     if (search && search.trim()) {
@@ -21,6 +30,8 @@ export const getUsers = async (req, res) => {
       where.OR = [
         { name: { contains: q } },
         { email: { contains: q } },
+        { assignedStore: { name: { contains: q } } },
+        { assignedStore: { code: { contains: q } } },
         ...(matchedRoles.length > 0 ? [{ role: { in: matchedRoles } }] : []),
       ];
     }
@@ -39,6 +50,21 @@ export const getUsers = async (req, res) => {
       email: true,
       role: true,
       isActive: true,
+      assignedStoreId: true,
+      assignedStore: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          city: {
+            select: {
+              id: true,
+              name: true,
+              state: true,
+            },
+          },
+        },
+      },
       createdAt: true,
     };
 
@@ -99,7 +125,7 @@ export const getUsers = async (req, res) => {
 
 export const createUser = async (req, res) => {
   try {
-    const { name, email, password, role = 'CASHIER' } = req.body;
+    const { name, email, password, role = 'CASHIER', assignedStoreId, storeId } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Name, email and password are required' });
@@ -113,6 +139,16 @@ export const createUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'User with this email already exists' });
     }
 
+    let finalStoreId = assignedStoreId || storeId || null;
+    if (finalStoreId && finalStoreId !== 'ALL' && finalStoreId !== '') {
+      const storeExists = await prisma.store.findUnique({ where: { id: finalStoreId } });
+      if (!storeExists) {
+        return res.status(400).json({ success: false, message: 'Selected outlet does not exist' });
+      }
+    } else {
+      finalStoreId = null;
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
@@ -121,6 +157,7 @@ export const createUser = async (req, res) => {
         email: email.toLowerCase().trim(),
         passwordHash,
         role,
+        assignedStoreId: finalStoreId,
       },
       select: {
         id: true,
@@ -128,6 +165,21 @@ export const createUser = async (req, res) => {
         email: true,
         role: true,
         isActive: true,
+        assignedStoreId: true,
+        assignedStore: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            city: {
+              select: {
+                id: true,
+                name: true,
+                state: true,
+              },
+            },
+          },
+        },
         createdAt: true,
       },
     });
@@ -141,7 +193,7 @@ export const createUser = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, password, role, isActive } = req.body;
+    const { name, email, password, role, isActive, assignedStoreId, storeId } = req.body;
 
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) {
@@ -177,6 +229,19 @@ export const updateUser = async (req, res) => {
     if (role !== undefined) updateData.role = role;
     if (isActive !== undefined) updateData.isActive = Boolean(isActive);
 
+    const storeParam = assignedStoreId !== undefined ? assignedStoreId : storeId;
+    if (storeParam !== undefined) {
+      if (storeParam && storeParam !== 'ALL' && storeParam !== '') {
+        const storeExists = await prisma.store.findUnique({ where: { id: storeParam } });
+        if (!storeExists) {
+          return res.status(400).json({ success: false, message: 'Selected outlet does not exist' });
+        }
+        updateData.assignedStoreId = storeParam;
+      } else {
+        updateData.assignedStoreId = null;
+      }
+    }
+
     if (password !== undefined && password !== null && password !== '') {
       const trimmedPassword = typeof password === 'string' ? password.trim() : '';
       if (trimmedPassword.length < 6) {
@@ -197,6 +262,21 @@ export const updateUser = async (req, res) => {
         email: true,
         role: true,
         isActive: true,
+        assignedStoreId: true,
+        assignedStore: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            city: {
+              select: {
+                id: true,
+                name: true,
+                state: true,
+              },
+            },
+          },
+        },
         createdAt: true,
         updatedAt: true,
       },

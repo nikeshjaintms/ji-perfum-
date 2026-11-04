@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Printer, Receipt, FileText, MapPin } from 'lucide-react';
+import { X, Printer, Receipt, FileText, MapPin, MessageCircle, Send, RefreshCw, Check, FileDown } from 'lucide-react';
 import QRCode from 'qrcode';
 import { numberToWords } from '../../utils/numberToWords';
+import { billingService } from '../../services/api';
 
 export default function InvoicePrintModal({ invoice, mode = 'a4', onClose }) {
   const [currentMode, setCurrentMode] = useState(mode); // 'a4' or 'thermal'
   const [qrCodeUrl, setQrCodeUrl] = useState('');
+  const [waSending, setWaSending] = useState(false);
+  const [waSent, setWaSent] = useState(false);
   
   // Default to true as user already has pre-printed letterhead with company details
   const [hideLetterhead, setHideLetterhead] = useState(true);
@@ -213,8 +216,63 @@ export default function InvoicePrintModal({ invoice, mode = 'a4', onClose }) {
             )}
           </div>
 
-          {/* Print & Close */}
+          {/* WhatsApp, Print & Close */}
           <div className="flex items-center space-x-2">
+            {invoice.customer?.phone && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const raw = (invoice.customer?.phone || '').replace(/\D/g, '').slice(-10);
+                  if (raw) {
+                    const backendBase = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000';
+                    const pdfUrl = `${backendBase}/api/v1/billing/${invoice.id}/pdf`;
+                    const customerName = invoice.customer?.name || 'Customer';
+                    const text = `✨ *${storeName.toUpperCase()} - TAX INVOICE* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nDear *${customerName}*,\nThank you for shopping at *${storeName}*!\n\n🧾 *Bill Number:* ${invoice.invoiceNumber}\n💰 *Grand Total:* ₹${finalNet}\n💳 *Payment:* ${paymentMethodLabel} · *${invoice.paymentStatus}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📄 *Download Official PDF Invoice:*\n${pdfUrl}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📍 Outlet: ${storeName}, ${cityText}\nWe hope you love your fragrance! Visit us again soon. 🌸`;
+
+                    // Auto-download PDF invoice to cashier device
+                    try {
+                      const link = document.createElement('a');
+                      link.href = pdfUrl;
+                      link.download = `JJ-Perfume-Invoice-${invoice.invoiceNumber}.pdf`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    } catch (dlErr) {
+                      console.warn(dlErr);
+                    }
+
+                    window.open(`https://api.whatsapp.com/send?phone=91${raw}&text=${encodeURIComponent(text)}`, '_blank');
+                    try {
+                      setWaSending(true);
+                      await billingService.sendWhatsApp(invoice.id);
+                      setWaSent(true);
+                      setTimeout(() => setWaSent(false), 3000);
+                    } catch (e) {
+                      console.warn(e);
+                    } finally {
+                      setWaSending(false);
+                    }
+                  }
+                }}
+                title="Send bill with PDF to Customer WhatsApp"
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-semibold tracking-wide transition shadow-md shadow-emerald-950/20 flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                {waSent ? <Check className="w-3.5 h-3.5" /> : <MessageCircle className="w-3.5 h-3.5" />}
+                <span className="whitespace-nowrap">{waSent ? 'WhatsApp Sent' : 'WhatsApp'}</span>
+              </button>
+            )}
+
+            <a
+              href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000'}/api/v1/billing/${invoice.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-full text-xs font-semibold tracking-wide transition shadow-sm flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              title="Download/View Official PDF Tax Invoice"
+            >
+              <FileDown className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+              <span className="whitespace-nowrap">PDF Bill</span>
+            </a>
+
             <button
               onClick={handlePrint}
               id="confirm-print-btn"
