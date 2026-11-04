@@ -81,7 +81,7 @@ async function main() {
   console.log('✅ Multi-City Stores seeded');
 
   // 3. Seed Users with assigned store
-  const passwordHash = await bcrypt.hash('admin123', 10);
+  const passwordHash = await bcrypt.hash(' ', 10);
   const cashierPasswordHash = await bcrypt.hash('cashier123', 10);
 
   const admin = await prisma.user.upsert({
