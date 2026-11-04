@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import DataTable from '../../components/DataTable';
-import { 
-  Package, 
+import {Package, 
   Search, 
   Plus, 
   Edit3, 
@@ -18,17 +17,47 @@ import {
   Image as ImageIcon,
   Upload,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
 import { productService, storeService } from '../../services/api';
 
-export default function ProductsView({ stores: propStores = [] }) {
+export default function ProductsView({
+  stores: propStores = [],
+  selectedStore = null,
+  activeCategoryId = null,
+  onSelectCategoryId = null,
+  onNavigateToCategoryMaster = null,
+}) {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [stores, setStores] = useState(propStores);
   const [loading, setLoading] = useState(false);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Debounce search typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
+  const [selectedCategory, setSelectedCategory] = useState(activeCategoryId || 'ALL');
+
+  useEffect(() => {
+    if (activeCategoryId) {
+      setSelectedCategory(activeCategoryId);
+    }
+  }, [activeCategoryId]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
 
@@ -193,40 +222,53 @@ export default function ProductsView({ stores: propStores = [] }) {
     }
   };
 
-  // Always ensure stores are loaded
-  useEffect(() => {
-    if (!stores.length) {
-      storeService.getStores()
-        .then((res) => {
-          if (res.data?.length) setStores(res.data);
-        })
-        .catch(console.error);
+    // Load categories once or on refresh
+  const loadCategories = useCallback(async () => {
+    try {
+      const catRes = await productService.getCategories();
+      if (catRes.success && catRes.data) {
+        setCategories(catRes.data);
+        setFormData((prev) => (!prev.categoryId && catRes.data.length > 0 ? { ...prev, categoryId: catRes.data[0].id } : prev));
+      }
+    } catch (err) {
+      console.error('Failed to load categories:', err);
     }
-  }, [stores.length]);
+  }, []);
 
   useEffect(() => {
-    loadProducts();
-  }, [selectedCategory]);
+    loadCategories();
+  }, [loadCategories]);
 
-  const loadProducts = async () => {
+    // Load products when page, category, debouncedSearch, or sorting changes
+  const loadProducts = useCallback(async () => {
     try {
       setLoading(true);
       setErrorMsg('');
-      const params = {};
+      const params = {
+        page,
+        limit: pageSize,
+      };
+      if (selectedStore?.id) {
+        params.storeId = selectedStore.id;
+      }
       if (selectedCategory !== 'ALL') {
         params.categoryId = selectedCategory;
       }
-      if (search) {
-        params.search = search;
+      if (debouncedSearch && debouncedSearch.trim()) {
+        params.search = debouncedSearch.trim();
       }
-      const [prodRes, catRes] = await Promise.all([
-        productService.getProducts(params),
-        productService.getCategories(),
-      ]);
+      if (sortConfig && sortConfig.key) {
+        params.sortBy = sortConfig.key;
+        params.sortOrder = sortConfig.direction || 'asc';
+      }
+
+      const prodRes = await productService.getProducts(params);
+
       setProducts(prodRes.data || []);
-      setCategories(catRes.data || []);
-      if (!formData.categoryId && catRes.data?.length > 0) {
-        setFormData((prev) => ({ ...prev, categoryId: catRes.data[0].id }));
+      if (prodRes.pagination) {
+        setTotalProducts(prodRes.pagination.total);
+      } else {
+        setTotalProducts((prodRes.data || []).length);
       }
     } catch (err) {
       console.error('Failed to load products:', err);
@@ -234,11 +276,42 @@ export default function ProductsView({ stores: propStores = [] }) {
     } finally {
       setLoading(false);
     }
+  }, [page, pageSize, selectedCategory, debouncedSearch, sortConfig, selectedStore?.id]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  const handleCategorySelect = (catId) => {
+    setSelectedCategory(catId);
+    if (onSelectCategoryId) onSelectCategoryId(catId);
+    setPage(1);
   };
+
+  const allCategoriesProductTotal = useMemo(() => {
+    const sum = categories.reduce((acc, cat) => acc + (cat._count?.products || 0), 0);
+    return sum || totalProducts;
+  }, [categories, totalProducts]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
+    setPage(1);
     loadProducts();
+  };
+
+  const handleSearchChange = (newSearch) => {
+    setSearch(newSearch);
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (newSize) => {
+    setPageSize(newSize);
+    setPage(1);
+  };
+
+  const handleSortChange = (newSort) => {
+    setSortConfig(newSort);
+    setPage(1);
   };
 
   const handleOpenAddModal = () => {
@@ -343,6 +416,7 @@ export default function ProductsView({ stores: propStores = [] }) {
 
       setIsModalOpen(false);
       loadProducts();
+      loadCategories();
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Failed to save product');
     } finally {
@@ -393,16 +467,17 @@ export default function ProductsView({ stores: propStores = [] }) {
       header: 'SKU & Barcode',
       sortAccessor: (prod) => prod.sku,
       sortable: true,
-      className: 'tabular-nums',
+      className: 'tabular-nums whitespace-nowrap font-mono',
+      headerClassName: 'whitespace-nowrap',
       render: (_, prod) => (
-        <div>
-          <div className="text-slate-900 font-medium flex items-center space-x-1.5 font-mono">
-            <Tag className="w-3 h-3 text-amber-600" />
+        <div className="whitespace-nowrap">
+          <div className="text-slate-900 font-medium flex items-center space-x-1.5 font-mono whitespace-nowrap">
+            <Tag className="w-3 h-3 text-amber-600 shrink-0" />
             <span>{prod.sku}</span>
           </div>
           {prod.barcode && (
-            <div className="text-[11px] text-slate-400 flex items-center space-x-1 mt-0.5 font-light font-mono">
-              <Barcode className="w-3 h-3 text-slate-400" />
+            <div className="text-[11px] text-slate-400 flex items-center space-x-1 mt-0.5 font-light font-mono whitespace-nowrap">
+              <Barcode className="w-3 h-3 text-slate-400 shrink-0" />
               <span>{prod.barcode}</span>
             </div>
           )}
@@ -414,8 +489,10 @@ export default function ProductsView({ stores: propStores = [] }) {
       header: 'Category',
       sortAccessor: (prod) => prod.category?.name || '',
       sortable: true,
+      className: 'whitespace-nowrap',
+      headerClassName: 'whitespace-nowrap',
       render: (_, prod) => (
-        <span className="inline-block px-2.5 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-slate-700 text-[11px] font-medium">
+        <span className="inline-block px-2.5 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-slate-700 text-[11px] font-medium whitespace-nowrap">
           {prod.category?.name || 'Fragrance'}
         </span>
       ),
@@ -427,14 +504,17 @@ export default function ProductsView({ stores: propStores = [] }) {
       sortable: true,
       align: 'right',
       className: 'tabular-nums font-semibold text-slate-900 text-sm whitespace-nowrap',
+      headerClassName: 'whitespace-nowrap',
       render: (val) => `₹${Number(val).toFixed(2)}`,
     },
     {
       key: 'stockBalances',
       header: 'Stock by Outlet',
       sortable: false,
+      className: 'whitespace-nowrap',
+      headerClassName: 'whitespace-nowrap',
       render: (_, prod) => (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 whitespace-nowrap">
           {prod.stockBalances && prod.stockBalances.length > 0 ? (
             prod.stockBalances.map((bal) => {
               const q = bal.quantity;
@@ -442,7 +522,7 @@ export default function ProductsView({ stores: propStores = [] }) {
               return (
                 <span
                   key={bal.id || bal.storeId}
-                  className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full text-[11px] tabular-nums border ${
+                  className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-full text-[11px] tabular-nums border whitespace-nowrap ${
                     q <= 0
                       ? 'bg-rose-50 text-rose-700 border-rose-200'
                       : q <= 5
@@ -456,33 +536,43 @@ export default function ProductsView({ stores: propStores = [] }) {
               );
             })
           ) : (
-            <span className="text-slate-400 text-[11px] font-light">No stock recorded</span>
+            <span className="text-slate-400 text-[11px] font-light whitespace-nowrap">No stock recorded</span>
           )}
         </div>
       ),
     },
     {
       key: 'stockQuantity',
-      header: 'Total Stock',
-      sortAccessor: (prod) => Number(prod.stockQuantity || 0),
+      header: selectedStore?.city?.name ? `Stock in ${selectedStore.city.name}` : 'Stock',
+      sortAccessor: (prod) => {
+        const storeStock = prod.currentStoreStock !== undefined ? prod.currentStoreStock : prod.stockQuantity;
+        return Number(storeStock || 0);
+      },
       sortable: true,
       align: 'center',
       className: 'whitespace-nowrap',
-      render: (val) => {
-        const qty = Number(val || 0);
+      headerClassName: 'whitespace-nowrap',
+      render: (_, prod) => {
+        const storeStock = prod.currentStoreStock !== undefined ? prod.currentStoreStock : prod.stockQuantity;
+        const qty = Number(storeStock || 0);
         const isOutOfStock = qty <= 0;
         const isLow = qty <= 10;
         return (
-          <span className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs tabular-nums font-medium border ${
-            isOutOfStock
-              ? 'bg-rose-50 text-rose-700 border-rose-200'
-              : isLow
-              ? 'bg-amber-50 text-amber-800 border-amber-200'
-              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-          }`}>
-            <span>{qty}</span>
-            <span className="text-[11px] opacity-75 font-sans">units</span>
-          </span>
+          <div className="text-center whitespace-nowrap">
+            <span className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs tabular-nums font-medium border whitespace-nowrap ${
+              isOutOfStock
+                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                : isLow
+                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            }`}>
+              <span>{qty}</span>
+              <span className="text-[11px] opacity-75 font-sans">counter</span>
+            </span>
+            <span className="block text-[10px] text-slate-400 font-light mt-0.5 whitespace-nowrap">
+              {prod.stockQuantity} total in chain
+            </span>
+          </div>
         );
       },
     },
@@ -492,11 +582,12 @@ export default function ProductsView({ stores: propStores = [] }) {
       sortable: false,
       align: 'center',
       className: 'whitespace-nowrap',
+      headerClassName: 'whitespace-nowrap',
       render: (_, prod) => (
-        <div className="flex items-center justify-center space-x-1.5">
+        <div className="flex items-center justify-center space-x-1.5 whitespace-nowrap">
           <button
             onClick={(e) => { e.stopPropagation(); handleOpenQuickStockIn(prod); }}
-            className="px-2.5 py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition flex items-center space-x-1 cursor-pointer"
+            className="px-2.5 py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition flex items-center space-x-1 cursor-pointer whitespace-nowrap"
             title="Add / Receive Stock In"
           >
             <Plus className="w-3 h-3 text-emerald-700" />
@@ -505,7 +596,7 @@ export default function ProductsView({ stores: propStores = [] }) {
 
           <button
             onClick={(e) => { e.stopPropagation(); handleOpenEditModal(prod); }}
-            className="p-1.5 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
+            className="p-1.5 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer whitespace-nowrap"
             title="Edit Fragrance & City Stock"
           >
             <Edit3 className="w-3.5 h-3.5" />
@@ -516,7 +607,7 @@ export default function ProductsView({ stores: propStores = [] }) {
   ], []);
 
   return (
-    <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div className="max-w-[1700px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
       
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
@@ -526,17 +617,37 @@ export default function ProductsView({ stores: propStores = [] }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
-          {/* Search */}
-          <form onSubmit={handleSearchSubmit} className="relative flex-1 sm:w-64 min-w-[180px]">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-2.5 pointer-events-none" />
+          {/* Search Input with Clear Button */}
+          <div className="relative flex-1 sm:w-64 min-w-[140px]">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search SKU, barcode, notes..."
-              className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 focus:border-amber-500 rounded-full text-xs text-slate-900 placeholder-slate-400 focus:outline-none transition font-sans shadow-sm"
+              placeholder="Search fragrance, SKU, barcode..."
+              className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 focus:border-amber-500 rounded-full text-xs text-slate-900 placeholder-slate-400 focus:outline-none transition font-sans shadow-xs"
             />
-          </form>
+            {search && (
+              <button
+                type="button"
+                onClick={() => { setSearch(''); setPage(1); }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          {/* Refresh Fragrances Button */}
+          <button
+            type="button"
+            onClick={() => { loadProducts(); loadCategories(); }}
+            title="Refresh fragrances"
+            className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-full text-slate-500 hover:text-slate-900 shadow-xs transition cursor-pointer shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-amber-500' : ''}`} />
+          </button>
 
           {/* Grid / List View Toggle */}
           <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
@@ -589,218 +700,303 @@ export default function ProductsView({ stores: propStores = [] }) {
         </div>
       </div>
 
-      {/* Categories Filter Tabs */}
-      <div className="flex items-center gap-5 mb-5 overflow-x-auto border-b border-slate-200">
+      {/* Categories Filter Pills (Clean Wrap, Zero Horizontal Scroll) */}
+      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-5">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mr-1 hidden sm:inline">
+          Category:
+        </span>
         <button
-          onClick={() => setSelectedCategory('ALL')}
-          className={`pb-2 text-sm whitespace-nowrap border-b-2 -mb-px transition-colors cursor-pointer ${
+          key="ALL"
+          type="button"
+          onClick={() => handleCategorySelect('ALL')}
+          className={`px-3 py-1.5 rounded-lg text-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
             selectedCategory === 'ALL'
-              ? 'border-amber-500 text-slate-900 font-semibold'
-              : 'border-transparent text-slate-500 hover:text-slate-900'
+              ? 'bg-amber-500 text-white font-semibold shadow-xs'
+              : 'bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 shadow-2xs'
           }`}
         >
-          All ({products.length})
+          <span className="whitespace-nowrap">All Fragrances</span>
+          <span className={`text-[10px] px-1.5 py-0.2 rounded-full tabular-nums whitespace-nowrap ${
+            selectedCategory === 'ALL' ? 'bg-amber-700/60 text-white' : 'bg-slate-100 text-slate-500'
+          }`}>
+            {allCategoriesProductTotal}
+          </span>
         </button>
         {categories.map((cat) => {
           const isActive = selectedCategory === cat.id;
+          const count = cat._count?.products || 0;
           return (
             <button
               key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`pb-2 text-sm whitespace-nowrap border-b-2 -mb-px transition-colors cursor-pointer ${
+              type="button"
+              onClick={() => handleCategorySelect(cat.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                 isActive
-                  ? 'border-amber-500 text-slate-900 font-semibold'
-                  : 'border-transparent text-slate-500 hover:text-slate-900'
+                  ? 'bg-amber-500 text-white font-semibold shadow-xs'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 shadow-2xs'
               }`}
             >
-              {cat.name} ({cat._count?.products || 0})
+              <span className="whitespace-nowrap">{cat.name}</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full tabular-nums whitespace-nowrap ${
+                isActive ? 'bg-amber-700/60 text-white' : 'bg-slate-100 text-slate-500'
+              }`}>
+                {count}
+              </span>
             </button>
           );
         })}
       </div>
 
-      {/* Loading & Empty States */}
-      {loading ? (
-        <div className="bg-white border border-slate-200 rounded-xl py-24 text-center text-slate-500 shadow-xs">
-          <RefreshCw className="w-6 h-6 text-amber-500 animate-spin mx-auto mb-2.5 opacity-80" />
-          <span className="text-sm text-slate-500 font-light">Loading boutique fragrance vault...</span>
+      {/* Active Category Filter Scope Hint */}
+      {search && selectedCategory !== 'ALL' && (
+        <div className="mb-3 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-center justify-between">
+          <span>
+            Searching for "<strong>{search}</strong>" in <strong>{categories.find((c) => c.id === selectedCategory)?.name || 'category'}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={() => handleCategorySelect('ALL')}
+            className="text-amber-800 hover:text-amber-950 font-semibold underline underline-offset-2 ml-2 cursor-pointer"
+          >
+            Search all categories
+          </button>
         </div>
-      ) : products.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-xl py-24 text-center text-slate-500 shadow-xs">
-          <Package className="w-10 h-10 text-slate-300 mx-auto mb-2.5" />
-          <p className="font-serif text-base text-slate-700">No fragrances found</p>
-          <p className="text-xs text-slate-400 mt-1">Try adjusting your category filter or search keywords.</p>
-        </div>
-      ) : viewMode === 'grid' ? (
+      )}
+
+      {viewMode === 'grid' ? (
         /* GRID VIEW */
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-          {products.map((prod) => {
-            const isOutOfStock = prod.stockQuantity <= 0;
-            const isLowStock = !isOutOfStock && prod.stockQuantity <= (prod.reorderLevel || 10);
+        <div>
+          {loading && products.length === 0 ? (
+            <div className="bg-white border border-slate-200 rounded-xl py-24 text-center text-slate-500 shadow-xs">
+              <RefreshCw className="w-6 h-6 text-amber-500 animate-spin mx-auto mb-2.5 opacity-80" />
+              <span className="text-sm text-slate-500 font-light">Loading boutique fragrance vault...</span>
+            </div>
+          ) : products.length === 0 ? (
+            <div className="bg-white border border-slate-200 rounded-xl py-24 text-center text-slate-500 shadow-xs">
+              <Package className="w-10 h-10 text-slate-300 mx-auto mb-2.5" />
+              <p className="font-serif text-base text-slate-700">No fragrances found</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {search ? `No products match "${search}". Try adjusting your keywords.` : 'Try selecting another category or adding a fragrance.'}
+              </p>
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => { setSearch(''); setPage(1); }}
+                  className="mt-3 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition cursor-pointer"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-5">
+                {products.map((prod) => {
+                  const storeStock = prod.currentStoreStock !== undefined ? prod.currentStoreStock : prod.stockQuantity;
+                  const isOutOfStock = storeStock <= 0;
+                  const isLowStock = !isOutOfStock && storeStock <= (prod.reorderLevel || 10);
 
-            return (
-              <div
-                key={prod.id}
-                className="group bg-white rounded-xl border border-slate-200 hover:border-amber-400 hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col"
-              >
-                {/* Product Image Banner */}
-                <div className="relative aspect-[4/3] bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100 overflow-hidden flex items-center justify-center">
-                  {prod.imageUrl ? (
-                    <img
-                      src={prod.imageUrl}
-                      alt={prod.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        const fallback = e.currentTarget.parentElement?.querySelector('.img-fallback');
-                        if (fallback) fallback.classList.remove('hidden');
-                      }}
-                    />
-                  ) : null}
-
-                  {/* Fallback Icon Container */}
-                  <div className={`img-fallback flex flex-col items-center justify-center text-slate-400 ${prod.imageUrl ? 'hidden' : ''}`}>
-                    <Package className="w-10 h-10 stroke-[1.25] text-slate-300 mb-1" />
-                    <span className="text-[10px] tracking-wider uppercase font-mono text-slate-400">No image</span>
-                  </div>
-
-                  {/* Category Badge & Stock Status Badge */}
-                  <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5 pointer-events-none">
-                    <span className="px-2 py-0.5 bg-white/95 backdrop-blur-sm rounded-md text-[10px] font-semibold text-slate-800 border border-slate-200 shadow-xs">
-                      {prod.category?.name || 'Fragrance'}
-                    </span>
-                    <span
-                      className={`px-2 py-0.5 rounded-md text-[10px] font-semibold backdrop-blur-sm border shadow-xs ${
-                        isOutOfStock
-                          ? 'bg-rose-50/95 text-rose-700 border-rose-200'
-                          : isLowStock
-                          ? 'bg-amber-50/95 text-amber-800 border-amber-200'
-                          : 'bg-emerald-50/95 text-emerald-800 border-emerald-200'
-                      }`}
+                  return (
+                    <div
+                      key={prod.id}
+                      className="group bg-white rounded-xl border border-slate-200 hover:border-amber-400 hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col"
                     >
-                      {isOutOfStock ? 'Out of stock' : isLowStock ? `${prod.stockQuantity} low stock` : `${prod.stockQuantity} in stock`}
-                    </span>
-                  </div>
+                      {/* Product Image Banner */}
+                      <div className="relative aspect-[4/3] bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100 overflow-hidden flex items-center justify-center">
+                        {prod.imageUrl ? (
+                          <img
+                            src={prod.imageUrl}
+                            alt={prod.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              const fallback = e.currentTarget.parentElement?.querySelector('.grid-fallback');
+                              if (fallback) fallback.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <Package className={`grid-fallback w-10 h-10 text-slate-300 ${prod.imageUrl ? 'hidden' : ''}`} />
 
-                  {/* Concentration & Volume overlay at bottom */}
-                  <div className="absolute bottom-2 left-2.5">
-                    <span className="px-2 py-0.5 bg-slate-900/75 backdrop-blur-md text-amber-300 rounded text-[10px] font-medium tracking-wide">
-                      {prod.concentration?.replace(/_/g, ' ')} · {prod.volumeMl}ml
-                    </span>
-                  </div>
-                </div>
-
-                {/* Card Info Content */}
-                <div className="p-4 flex-1 flex flex-col">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[10px] tracking-widest uppercase font-semibold text-amber-700">
-                        {prod.brand || 'J I PERFUME'}
+                        {/* Stock Status Badge */}
+                        <span
+                          className={`absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide border shadow-2xs whitespace-nowrap ${
+                            isOutOfStock
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : isLowStock
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}
+                        >
+                          {isOutOfStock ? 'Out of stock' : isLowStock ? 'Low stock' : 'In stock'}
+                        </span>
                       </div>
-                      <h3 className="font-serif font-medium text-slate-900 text-base leading-snug group-hover:text-amber-700 transition-colors truncate">
-                        {prod.name}
-                      </h3>
-                    </div>
-                    <div className="text-right whitespace-nowrap">
-                      <span className="font-semibold text-slate-900 text-sm tabular-nums">
-                        ₹{Number(prod.sellingPrice).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* SKU & Barcode */}
-                  <div className="text-[11px] text-slate-500 font-mono mt-1 flex items-center gap-2">
-                    <span className="flex items-center gap-1 text-slate-700">
-                      <Tag className="w-3 h-3 text-amber-600" />
-                      <span>{prod.sku}</span>
-                    </span>
-                    {prod.barcode && <span className="text-slate-400">· {prod.barcode}</span>}
-                  </div>
+                      {/* Info Body */}
+                      <div className="p-4 flex-1 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between text-xs text-amber-700 font-medium">
+                            <span className="truncate">{prod.category?.name || 'Fragrance'}</span>
+                            <span className="tabular-nums whitespace-nowrap">{prod.volumeMl}ml</span>
+                          </div>
 
-                  {/* Fragrance Notes */}
-                  {prod.fragranceNotes && (
-                    <p className="text-xs text-slate-500 italic font-serif line-clamp-2 mt-2 leading-relaxed">
-                      {prod.fragranceNotes}
-                    </p>
-                  )}
+                          <h3 className="font-serif font-medium text-slate-900 text-base mt-1 line-clamp-1 group-hover:text-amber-800 transition-colors">
+                            {prod.name}
+                          </h3>
 
-                  {/* City Stock Breakdown */}
-                  <div className="mt-3 pt-3 border-t border-slate-100 flex-1">
-                    <div className="text-[10px] uppercase tracking-wider text-slate-400 font-medium mb-1.5 flex items-center gap-1">
-                      <MapPin className="w-3 h-3 text-amber-600" />
-                      <span>Stock by Boutique</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {prod.stockBalances && prod.stockBalances.length > 0 ? (
-                        prod.stockBalances.map((bal) => {
-                          const q = bal.quantity;
-                          const cityName = bal.store?.city?.name || bal.store?.name?.split(' ')[0] || 'Store';
-                          return (
-                            <span
-                              key={bal.id || bal.storeId}
-                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border ${
-                                q <= 0
-                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
-                                  : q <= 5
-                                  ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                  : 'bg-slate-50 text-slate-600 border-slate-200'
-                              }`}
-                            >
-                              <span className="text-slate-400">{cityName}:</span>
-                              <span className="font-semibold text-slate-800">{q}</span>
+                          {prod.fragranceNotes && (
+                            <p className="text-xs text-slate-500 font-light mt-1 italic line-clamp-2">
+                              {prod.fragranceNotes}
+                            </p>
+                          )}
+
+                          <div className="mt-3 flex items-center gap-2 text-xs text-slate-400 font-mono">
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 whitespace-nowrap">{prod.sku}</span>
+                            {prod.barcode && <span className="truncate whitespace-nowrap">{prod.barcode}</span>}
+                          </div>
+                        </div>
+
+                        {/* Pricing & Stock Stats */}
+                        <div className="mt-4 pt-3 border-t border-slate-100">
+                          <div className="flex items-baseline justify-between mb-2 whitespace-nowrap">
+                            <span className="text-xs text-slate-400 font-light whitespace-nowrap">Selling price</span>
+                            <span className="text-base font-semibold text-slate-900 tabular-nums whitespace-nowrap">
+                              ₹{Number(prod.sellingPrice).toFixed(2)}
                             </span>
-                          );
-                        })
-                      ) : (
-                        <span className="text-[11px] text-slate-400 italic">No city stock recorded</span>
-                      )}
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100 whitespace-nowrap">
+                            <span className="whitespace-nowrap">{selectedStore?.city?.name ? `${selectedStore.city.name} stock:` : 'Counter stock:'}</span>
+                            <span className="font-semibold text-slate-900 tabular-nums whitespace-nowrap">
+                              {storeStock} units {prod.stockQuantity !== storeStock && <span className="text-[10px] text-slate-400 font-normal whitespace-nowrap">({prod.stockQuantity} chain)</span>}
+                            </span>
+                          </div>
+
+                          {/* Actions Footer */}
+                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-2 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenQuickStockIn(prod)}
+                              className="flex-1 py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
+                            >
+                              <Plus className="w-3 h-3 text-emerald-700 shrink-0" />
+                              <span>Stock In</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(prod)}
+                              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-xs transition cursor-pointer shrink-0"
+                              title="Edit Fragrance"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Grid Pagination Controls */}
+              {totalProducts > 0 && (
+                <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs text-slate-600 shadow-2xs">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-slate-400 font-light">Cards:</span>
+                      <select
+                        value={pageSize}
+                        onChange={(e) => handlePageSizeChange(e.target.value)}
+                        className="bg-slate-50 text-slate-800 border border-slate-200 focus:border-amber-500 rounded-lg px-2 py-1 text-xs focus:outline-none cursor-pointer"
+                      >
+                        {[10, 25, 50, 100].map((opt) => (
+                          <option key={opt} value={opt}>{opt} per page</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="text-slate-500 font-light">
+                      Showing <strong className="font-semibold text-slate-900 tabular-nums">{(page - 1) * pageSize + 1}</strong> to{' '}
+                      <strong className="font-semibold text-slate-900 tabular-nums">{Math.min(page * pageSize, totalProducts)}</strong> of{' '}
+                      <strong className="font-semibold text-slate-900 tabular-nums">{totalProducts}</strong> fragrances
                     </div>
                   </div>
 
-                  {/* Actions Footer */}
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2">
+                  <div className="flex items-center space-x-1">
                     <button
                       type="button"
-                      onClick={() => handleOpenQuickStockIn(prod)}
-                      className="flex-1 py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1 cursor-pointer"
+                      onClick={() => setPage(1)}
+                      disabled={page === 1}
+                      className="p-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                      title="First Page"
                     >
-                      <Plus className="w-3 h-3 text-emerald-700" />
-                      <span>Stock In</span>
+                      <ChevronsLeft className="w-3.5 h-3.5 text-slate-600" />
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleOpenEditModal(prod)}
-                      className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-xs transition cursor-pointer"
-                      title="Edit Fragrance"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="p-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                      title="Previous Page"
                     >
-                      <Edit3 className="w-3.5 h-3.5" />
+                      <ChevronLeft className="w-3.5 h-3.5 text-slate-600" />
+                    </button>
+
+                    <span className="px-2.5 py-1 text-xs font-semibold text-slate-900 bg-amber-500/10 border border-amber-400/30 rounded-lg tabular-nums">
+                      Page {page} of {Math.max(1, Math.ceil(totalProducts / pageSize))}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setPage((p) => Math.min(Math.ceil(totalProducts / pageSize), p + 1))}
+                      disabled={page === Math.max(1, Math.ceil(totalProducts / pageSize))}
+                      className="p-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                      title="Next Page"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPage(Math.max(1, Math.ceil(totalProducts / pageSize)))}
+                      disabled={page === Math.max(1, Math.ceil(totalProducts / pageSize))}
+                      className="p-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                      title="Last Page"
+                    >
+                      <ChevronsRight className="w-3.5 h-3.5 text-slate-600" />
                     </button>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              )}
+            </>
+          )}
         </div>
       ) : (
-        /* LIST / TABLE VIEW */
+        /* LIST / TABLE VIEW - DataTable stays mounted continuously */
         <DataTable
           columns={productColumns}
           data={products}
           loading={loading}
-          searchPlaceholder="Instant search fragrance name, SKU, notes, barcode..."
+          serverSide={true}
+          totalCount={totalProducts}
+          page={page}
+          onPageChange={setPage}
+          pageSize={pageSize}
+          onPageSizeChange={handlePageSizeChange}
+          searchable={false}
+          sortConfig={sortConfig}
+          onSortChange={handleSortChange}
+          pagination={true}
           defaultPageSize={10}
           pageSizeOptions={[10, 25, 50, 100]}
           emptyIcon={Package}
           emptyMessage="No fragrances found"
-          emptySubtext="Try adjusting your category filter or search keywords."
+          emptySubtext={search ? `No fragrances match "${search}". Try adjusting your keywords.` : 'Try adjusting your category filter.'}
           initialSort={{ key: 'name', direction: 'asc' }}
         />
       )}
 
       {/* Add / Edit Product Modal with Image & Multi-City Stock Inputs */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-xs">
-          <div className="bg-white border border-slate-200 rounded-xl max-w-2xl w-full p-6 shadow-xl max-h-[90vh] overflow-y-auto text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/50 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl max-h-[92vh] overflow-y-auto text-slate-900 my-auto no-scrollbar">
             
             <div className="flex items-center justify-between pb-4 border-b border-slate-200">
               <div className="flex items-center space-x-3">
@@ -1023,7 +1219,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 <div>
                   <label className="text-xs font-medium text-slate-700 block mb-1">Volume (ml)</label>
                   <input
@@ -1121,7 +1317,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                   <MapPin className="w-3.5 h-3.5 text-amber-600" />
                   <span>Stock by city boutique</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
                   {stores.map((st) => (
                     <div key={st.id}>
                       <label className="text-xs text-slate-500 block mb-1 font-light truncate">
@@ -1148,18 +1344,18 @@ export default function ProductsView({ stores: propStores = [] }) {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-200 flex justify-end space-x-2.5">
+              <div className="pt-4 border-t border-slate-200 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-medium transition cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition cursor-pointer text-center"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={formSubmitting}
-                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center space-x-1.5 cursor-pointer disabled:opacity-60"
+                  className="w-full sm:w-auto px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition shadow-md flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-60"
                 >
                   {formSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   <span>{editingProduct ? 'Update Fragrance & Stock' : 'Save Fragrance SKU'}</span>
@@ -1174,8 +1370,8 @@ export default function ProductsView({ stores: propStores = [] }) {
 
       {/* Quick Stock In / Inventory Receipt Modal */}
       {isStockInModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl text-slate-900 relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl text-slate-900 relative my-auto max-h-[92vh] overflow-y-auto no-scrollbar">
             
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center space-x-2.5">
@@ -1313,7 +1509,7 @@ export default function ProductsView({ stores: propStores = [] }) {
                 )}
 
                 {/* Quick Add Pills */}
-                <div className="flex gap-1.5 mt-2">
+                <div className="grid grid-cols-5 gap-1 sm:gap-1.5 mt-2">
                   {[5, 10, 25, 50, 100].map((preset) => (
                     <button
                       key={preset}
@@ -1346,18 +1542,18 @@ export default function ProductsView({ stores: propStores = [] }) {
                 />
               </div>
 
-              <div className="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+              <div className="pt-3 border-t border-slate-200 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsStockInModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-medium transition cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition cursor-pointer text-center"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={stockInSubmitting}
-                  className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold transition shadow-md flex items-center space-x-1.5 cursor-pointer disabled:opacity-60"
+                  className="w-full sm:w-auto px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold transition shadow-md flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-60"
                 >
                   {stockInSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   <span>{stockInSubmitting ? 'Updating Stock...' : 'Confirm Stock In'}</span>

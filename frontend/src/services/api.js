@@ -1,15 +1,40 @@
 import axios from 'axios';
 
+// Cookie helper utilities for browser environment
+export const getCookie = (name) => {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^|;\\s*)' + name + '=([^;]*)'));
+  return match ? decodeURIComponent(match[2]) : null;
+};
+
+export const setCookie = (name, value, days = 7) => {
+  if (typeof document === 'undefined') return;
+  let expires = '';
+  if (days) {
+    const date = new Date();
+    date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
+    expires = '; expires=' + date.toUTCString();
+  }
+  document.cookie = `${name}=${encodeURIComponent(value || '')}${expires}; path=/; SameSite=Lax`;
+};
+
+export const removeCookie = (name) => {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax`;
+};
+
 const api = axios.create({
   baseURL: '/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Automatically sends cookies with cross-origin or same-site requests
 });
 
-// Request interceptor to attach JWT token
+// Request interceptor: read token from cookies and attach Authorization header as extra assurance
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('jj_token');
+  config.withCredentials = true;
+  const token = getCookie('jj_token') || getCookie('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -21,9 +46,14 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      if (!error.config.url.includes('/auth/login')) {
-        localStorage.removeItem('jj_token');
+      const url = error.config?.url || '';
+      if (!url.includes('/auth/login') && !url.includes('/auth/register')) {
+        removeCookie('token');
+        removeCookie('jj_token');
         localStorage.removeItem('jj_user');
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+        }
       }
     }
     return Promise.reject(error);
@@ -34,18 +64,40 @@ export const authService = {
   login: async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
     if (res.data?.data?.token) {
-      localStorage.setItem('jj_token', res.data.data.token);
+      setCookie('jj_token', res.data.data.token, 7);
+      setCookie('token', res.data.data.token, 7);
       localStorage.setItem('jj_user', JSON.stringify(res.data.data.user));
     }
+    return res.data;
+  },
+  register: async (userData) => {
+    const res = await api.post('/auth/register', userData);
     return res.data;
   },
   getMe: async () => {
     const res = await api.get('/auth/me');
     return res.data;
   },
-  logout: () => {
-    localStorage.removeItem('jj_token');
+  logout: async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (err) {
+      console.warn('Logout API error:', err);
+    }
+    removeCookie('token');
+    removeCookie('jj_token');
     localStorage.removeItem('jj_user');
+  },
+  changePassword: async ({ currentPassword, newPassword }) => {
+    const res = await api.put('/auth/change-password', { currentPassword, newPassword });
+    if (res.data?.data?.token) {
+      setCookie('jj_token', res.data.data.token, 7);
+      setCookie('token', res.data.data.token, 7);
+      if (res.data.data.user) {
+        localStorage.setItem('jj_user', JSON.stringify(res.data.data.user));
+      }
+    }
+    return res.data;
   },
 };
 
@@ -72,6 +124,25 @@ export const storeService = {
   },
 };
 
+export const categoryService = {
+  getCategories: async (params) => {
+    const res = await api.get('/products/categories', { params });
+    return res.data;
+  },
+  createCategory: async (categoryData) => {
+    const res = await api.post('/products/categories', categoryData);
+    return res.data;
+  },
+  updateCategory: async (id, categoryData) => {
+    const res = await api.put(`/products/categories/${id}`, categoryData);
+    return res.data;
+  },
+  deleteCategory: async (id) => {
+    const res = await api.delete(`/products/categories/${id}`);
+    return res.data;
+  },
+};
+
 export const productService = {
   getProducts: async (params) => {
     const res = await api.get('/products', { params });
@@ -83,8 +154,20 @@ export const productService = {
     });
     return res.data;
   },
-  getCategories: async () => {
-    const res = await api.get('/products/categories');
+  getCategories: async (params) => {
+    const res = await api.get('/products/categories', { params });
+    return res.data;
+  },
+  createCategory: async (categoryData) => {
+    const res = await api.post('/products/categories', categoryData);
+    return res.data;
+  },
+  updateCategory: async (id, categoryData) => {
+    const res = await api.put(`/products/categories/${id}`, categoryData);
+    return res.data;
+  },
+  deleteCategory: async (id) => {
+    const res = await api.delete(`/products/categories/${id}`);
     return res.data;
   },
   createProduct: async (productData) => {
@@ -122,6 +205,10 @@ export const billingService = {
     const res = await api.post(`/billing/${id}/collect-due`, payload);
     return res.data;
   },
+  sendWhatsApp: async (id) => {
+    const res = await api.post(`/billing/${id}/send-whatsapp`);
+    return res.data;
+  },
 };
 
 export const paymentService = {
@@ -136,12 +223,20 @@ export const paymentService = {
 };
 
 export const userService = {
-  getUsers: async () => {
-    const res = await api.get('/users');
+  getUsers: async (params) => {
+    const res = await api.get('/users', { params });
     return res.data;
   },
   createUser: async (userData) => {
     const res = await api.post('/users', userData);
+    return res.data;
+  },
+  updateUser: async (id, userData) => {
+    const res = await api.put(`/users/${id}`, userData);
+    return res.data;
+  },
+  deleteUser: async (id) => {
+    const res = await api.delete(`/users/${id}`);
     return res.data;
   },
 };

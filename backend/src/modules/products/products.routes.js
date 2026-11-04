@@ -6,6 +6,9 @@ import {
   updateProduct,
   adjustStock,
   getCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
 } from './products.controller.js';
 import { authenticate, authorize } from '../../middleware/auth.js';
 
@@ -15,6 +18,11 @@ const router = Router();
 router.get('/', authenticate, getProducts);
 router.get('/lookup/:code', authenticate, getProductByBarcodeOrSku);
 router.get('/categories', authenticate, getCategories);
+
+// Category Master Management
+router.post('/categories', authenticate, authorize(['SUPER_ADMIN', 'STORE_MANAGER']), createCategory);
+router.put('/categories/:id', authenticate, authorize(['SUPER_ADMIN', 'STORE_MANAGER']), updateCategory);
+router.delete('/categories/:id', authenticate, authorize(['SUPER_ADMIN', 'STORE_MANAGER']), deleteCategory);
 
 // Admin / Store Manager modifications
 router.post('/', authenticate, authorize(['SUPER_ADMIN', 'STORE_MANAGER']), createProduct);

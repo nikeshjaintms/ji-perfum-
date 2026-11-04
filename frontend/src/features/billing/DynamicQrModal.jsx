@@ -13,10 +13,14 @@ import {
   Banknote,
   CreditCard,
   Layers,
-  BookOpen
+  BookOpen,
+  MessageCircle,
+  Send,
+  RefreshCw,
+  FileDown
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { paymentService } from '../../services/api';
+import { paymentService, billingService } from '../../services/api';
 
 export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, onPrintReceipt }) {
   const [copied, setCopied] = useState(false);
@@ -24,6 +28,9 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
   const [utrInput, setUtrInput] = useState('');
   const [currentStatus, setCurrentStatus] = useState(invoiceData?.paymentStatus || 'PENDING');
   const [txRef, setTxRef] = useState(invoiceData?.payment?.transactionReference || '');
+  const [whatsappState, setWhatsappState] = useState(invoiceData?.whatsapp || null);
+  const [isSendingWa, setIsSendingWa] = useState(false);
+  const [waFeedback, setWaFeedback] = useState('');
 
   if (!invoiceData) return null;
 
@@ -62,12 +69,18 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
       if (res.success) {
         setCurrentStatus(res.data.paymentStatus || 'PAID');
         setTxRef(res.data.transactionReference);
+        if (res.data.whatsapp) {
+          setWhatsappState(res.data.whatsapp);
+        }
         confetti({
           particleCount: 80,
           spread: 70,
           origin: { y: 0.6 },
           colors: ['#0A47E5', '#00A3FF', '#E5C07B', '#10B981'],
         });
+
+        window.dispatchEvent(new CustomEvent('catalog:refresh'));
+        window.dispatchEvent(new CustomEvent('invoices:refresh'));
       }
     } catch (err) {
       console.error('Failed to confirm payment:', err);
@@ -77,12 +90,69 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
     }
   };
 
+  const handleResendWhatsApp = async () => {
+    try {
+      setIsSendingWa(true);
+      setWaFeedback('');
+      const res = await billingService.sendWhatsApp(invoiceData.id);
+      if (res.success && res.data) {
+        setWhatsappState(res.data);
+        setWaFeedback('Bill sent to WhatsApp!');
+        setTimeout(() => setWaFeedback(''), 4000);
+      }
+    } catch (err) {
+      console.error('WhatsApp re-send error:', err);
+      setWaFeedback('Could not send via API');
+      setTimeout(() => setWaFeedback(''), 4000);
+    } finally {
+      setIsSendingWa(false);
+    }
+  };
+
+  const customerPhone = invoiceData.customer?.phone || invoiceData.customerPhone || '';
+  const customerName = invoiceData.customer?.name || 'Customer';
+  const cleanPhone = customerPhone.replace(/\D/g, '').slice(-10);
+
+  const getDirectWhatsAppUrl = () => {
+    if (whatsappState?.whatsappUrl) return whatsappState.whatsappUrl;
+    if (!cleanPhone) return null;
+    const backendBase = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000';
+    const pdfUrl = `${backendBase}/api/v1/billing/${invoiceData.id}/pdf`;
+    const text = `✨ *JJ PERFUME - TAX INVOICE* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nDear *${customerName}*,\nThank you for shopping at *JJ PERFUME*!\n\n🧾 *Bill Number:* ${invoiceData.invoiceNumber}\n💰 *Grand Total:* ₹${grandTotal.toFixed(2)}\n💳 *Payment:* ${invoiceData.paymentMethod || 'UPI QR'} · *${isPaid ? 'PAID IN FULL ✅' : 'PARTIALLY PAID ⏳'}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📄 *Download Official PDF Invoice:*\n${pdfUrl}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📍 Outlet: JJ PERFUME, Mandvi\nWe hope you love your fragrance! Visit us again soon. 🌸`;
+    return `https://api.whatsapp.com/send?phone=91${cleanPhone}&text=${encodeURIComponent(text)}`;
+  };
+
+  const handleOpenWhatsAppWithPdf = () => {
+    try {
+      const backendBase = import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000';
+      const pdfUrl = `${backendBase}/api/v1/billing/${invoiceData.id}/pdf`;
+      
+      // Auto-download PDF so cashier has it ready to attach in WhatsApp
+      const link = document.createElement('a');
+      link.href = pdfUrl;
+      link.download = `JJ-Perfume-Invoice-${invoiceData.invoiceNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Open WhatsApp chat
+      const directUrl = getDirectWhatsAppUrl();
+      if (directUrl) {
+        window.open(directUrl, '_blank');
+      }
+      setWaFeedback('PDF downloaded & WhatsApp opened! You can attach the PDF in chat.');
+      setTimeout(() => setWaFeedback(''), 6000);
+    } catch (e) {
+      console.warn('PDF download error:', e);
+    }
+  };
+
   const isPaid = currentStatus === 'PAID';
   const isPartial = currentStatus === 'PARTIALLY_PAID' || creditAmount > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 ">
-      <div className="bg-white border border-slate-200 rounded-lg max-w-lg w-full overflow-hidden shadow-lg relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/50 backdrop-blur-xs overflow-y-auto">
+      <div className="bg-white border border-slate-200 rounded-xl max-w-lg w-full overflow-hidden shadow-2xl relative max-h-[92vh] flex flex-col my-auto">
         
         {/* Modal Header */}
         <div className="bg-slate-50/80 p-5 border-b border-slate-200 flex items-center justify-between">
@@ -113,74 +183,74 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 flex flex-col items-center text-center space-y-4">
+        <div className="p-4 sm:p-6 flex flex-col items-center text-center space-y-3.5 sm:space-y-4 overflow-y-auto no-scrollbar">
           
           {/* Status Badge */}
           {isPaid ? (
-            <div className="w-full bg-emerald-500/10 border border-emerald-500/25 text-slate-600 py-2.5 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>Paid in full</span>
+            <div className="w-full bg-emerald-500/10 border border-emerald-500/25 text-slate-600 py-2.5 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              <span className="whitespace-nowrap">Paid in full</span>
             </div>
           ) : isPartial ? (
-            <div className="w-full bg-amber-500/10 border border-amber-500/25 text-amber-700 py-2 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600" />
-              <span>Part paid. Still due: ₹{creditAmount.toFixed(2)}</span>
+            <div className="w-full bg-amber-500/10 border border-amber-500/25 text-amber-700 py-2 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600 shrink-0" />
+              <span className="whitespace-nowrap">Part paid. Still due: ₹{creditAmount.toFixed(2)}</span>
             </div>
           ) : (
-            <div className="w-full bg-slate-100 border border-slate-200 text-slate-600 py-2 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600" />
-              <span>Waiting for the customer to pay</span>
+            <div className="w-full bg-slate-100 border border-slate-200 text-slate-600 py-2 px-4 rounded-md flex items-center justify-center space-x-2 text-sm font-medium whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600 shrink-0" />
+              <span className="whitespace-nowrap">Waiting for the customer to pay</span>
             </div>
           )}
 
           {/* Split Tender Breakdown Box (if Split or Credit) */}
           {(isSplit || isCredit) && (
             <div className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-left space-y-1.5 text-xs">
-              <div className="text-[11px] text-amber-600 font-semibold flex items-center space-x-1.5 mb-1">
-                <Layers className="w-3 h-3" />
-                <span>How this bill is paid</span>
+              <div className="text-[11px] text-amber-600 font-semibold flex items-center space-x-1.5 mb-1 whitespace-nowrap">
+                <Layers className="w-3 h-3 shrink-0" />
+                <span className="whitespace-nowrap">How this bill is paid</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                 {cashAmount > 0 && (
-                  <div className="p-2 bg-white border border-slate-200 rounded-md">
-                    <span className="text-[11px] text-slate-600 flex items-center justify-center space-x-1">
-                      <Banknote className="w-3 h-3" />
-                      <span>Cash</span>
+                  <div className="p-2 bg-white border border-slate-200 rounded-md whitespace-nowrap">
+                    <span className="text-[11px] text-slate-600 flex items-center justify-center space-x-1 whitespace-nowrap">
+                      <Banknote className="w-3 h-3 shrink-0" />
+                      <span className="whitespace-nowrap">Cash</span>
                     </span>
-                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block">
+                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block whitespace-nowrap">
                       ₹{cashAmount.toFixed(2)}
                     </span>
                   </div>
                 )}
                 {cardAmount > 0 && (
-                  <div className="p-2 bg-white border border-slate-200 rounded-md">
-                    <span className="text-[11px] text-slate-600 flex items-center justify-center space-x-1">
-                      <CreditCard className="w-3 h-3" />
-                      <span>Card</span>
+                  <div className="p-2 bg-white border border-slate-200 rounded-md whitespace-nowrap">
+                    <span className="text-[11px] text-slate-600 flex items-center justify-center space-x-1 whitespace-nowrap">
+                      <CreditCard className="w-3 h-3 shrink-0" />
+                      <span className="whitespace-nowrap">Card</span>
                     </span>
-                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block">
+                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block whitespace-nowrap">
                       ₹{cardAmount.toFixed(2)}
                     </span>
                   </div>
                 )}
                 {upiAmount > 0 && (
-                  <div className="p-2 bg-white border border-slate-200 rounded-md">
-                    <span className="text-[11px] text-amber-700 flex items-center justify-center space-x-1">
-                      <QrCode className="w-3 h-3" />
-                      <span>UPI QR</span>
+                  <div className="p-2 bg-white border border-slate-200 rounded-md whitespace-nowrap">
+                    <span className="text-[11px] text-amber-700 flex items-center justify-center space-x-1 whitespace-nowrap">
+                      <QrCode className="w-3 h-3 shrink-0" />
+                      <span className="whitespace-nowrap">UPI QR</span>
                     </span>
-                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block">
+                    <span className="text-xs font-semibold text-slate-900 tabular-nums mt-0.5 block whitespace-nowrap">
                       ₹{upiAmount.toFixed(2)}
                     </span>
                   </div>
                 )}
                 {creditAmount > 0 && (
-                  <div className="p-2 bg-rose-50 border border-rose-200 rounded-md">
-                    <span className="text-[11px] text-rose-600 flex items-center justify-center space-x-1">
-                      <BookOpen className="w-3 h-3" />
-                      <span>On credit</span>
+                  <div className="p-2 bg-rose-50 border border-rose-200 rounded-md whitespace-nowrap">
+                    <span className="text-[11px] text-rose-600 flex items-center justify-center space-x-1 whitespace-nowrap">
+                      <BookOpen className="w-3 h-3 shrink-0" />
+                      <span className="whitespace-nowrap">On credit</span>
                     </span>
-                    <span className="text-xs font-semibold text-rose-600 tabular-nums mt-0.5 block">
+                    <span className="text-xs font-semibold text-rose-600 tabular-nums mt-0.5 block whitespace-nowrap">
                       ₹{creditAmount.toFixed(2)}
                     </span>
                   </div>
@@ -263,7 +333,7 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
           {/* Cashier Payment Confirmation controls */}
           {!isPaid && (
             <div className="w-full pt-2 border-t border-slate-200 flex flex-col space-y-2">
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   value={utrInput}
@@ -283,22 +353,97 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
             </div>
           )}
 
-          {/* Print Actions */}
-          <div className="w-full pt-3 border-t border-slate-200 grid grid-cols-2 gap-2.5">
+          {/* WhatsApp Bill Dispatch Status & Action */}
+          {isPaid && cleanPhone && (
+            <div className={`w-full p-3.5 rounded-xl border flex flex-col sm:flex-row items-center justify-between gap-3 text-left transition ${
+              whatsappState?.success
+                ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                : 'bg-amber-50/80 border-amber-300 text-amber-950'
+            }`}>
+              <div className="flex items-center space-x-2.5">
+                <div className={`p-2 rounded-full shadow-xs shrink-0 text-white ${
+                  whatsappState?.success ? 'bg-emerald-600' : 'bg-amber-600'
+                }`}>
+                  <MessageCircle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold flex items-center gap-1.5">
+                    <span>{whatsappState?.success ? 'Bill Auto-Sent to WhatsApp' : 'WhatsApp Delivery'}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                      whatsappState?.success ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
+                    }`}>
+                      {whatsappState?.success ? 'Delivered / Queued' : 'Gateway Status'}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] mt-0.5 opacity-90">
+                    To: <strong className="font-semibold">+91 {cleanPhone}</strong> ({customerName})
+                  </p>
+                  {whatsappState?.message && (
+                    <p className={`text-[10px] font-medium mt-0.5 ${
+                      whatsappState?.success ? 'text-emerald-700' : 'text-rose-700'
+                    }`}>
+                      {whatsappState.message}
+                    </p>
+                  )}
+                  {waFeedback && (
+                    <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">{waFeedback}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {getDirectWhatsAppUrl() && (
+                  <button
+                    type="button"
+                    onClick={handleOpenWhatsAppWithPdf}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer whitespace-nowrap"
+                    title="Downloads PDF Bill & Opens WhatsApp chat"
+                  >
+                    <Send className="w-3 h-3 text-white" />
+                    <span>Send on WhatsApp</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleResendWhatsApp}
+                  disabled={isSendingWa}
+                  className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  title="Trigger auto-send via API"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSendingWa ? 'animate-spin' : ''}`} />
+                  <span>{isSendingWa ? 'Sending…' : 'Retry API'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Print & PDF Actions */}
+          <div className="w-full pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-2 whitespace-nowrap">
+            <a
+              href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'http://localhost:5000'}/api/v1/billing/${invoiceData.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="py-2.5 px-3 bg-slate-900 hover:bg-black text-amber-400 hover:text-amber-300 rounded-md text-xs font-semibold flex items-center justify-center space-x-1.5 transition shadow-xs whitespace-nowrap"
+              title="Download or view official A4 Tax Invoice PDF"
+            >
+              <FileDown className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">Download PDF Bill</span>
+            </a>
+
             <button
               onClick={() => onPrintInvoice(invoiceData)}
-              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md text-xs font-medium flex items-center justify-center space-x-2 border border-slate-200 transition"
+              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md text-xs font-medium flex items-center justify-center space-x-1.5 border border-slate-200 transition whitespace-nowrap"
             >
-              <Printer className="w-3.5 h-3.5 text-amber-600" />
-              <span>A4 Tax Invoice</span>
+              <Printer className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="whitespace-nowrap">A4 Tax Invoice</span>
             </button>
 
             <button
               onClick={() => onPrintReceipt(invoiceData)}
-              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md text-xs font-medium flex items-center justify-center space-x-2 border border-slate-200 transition"
+              className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md text-xs font-medium flex items-center justify-center space-x-2 border border-slate-200 transition whitespace-nowrap"
             >
-              <Receipt className="w-3.5 h-3.5 text-slate-600" />
-              <span>Print receipt</span>
+              <Receipt className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+              <span className="whitespace-nowrap">Print receipt</span>
             </button>
           </div>
 

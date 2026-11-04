@@ -3,14 +3,27 @@
 @tailwind utilities;
 
 @layer base {
-  body {
+  html, body {
     @apply bg-paper text-slate-900 font-sans;
     font-variant-numeric: tabular-nums;
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
   }
   :focus-visible {
     outline: 2px solid #2F5D4E;
     outline-offset: 2px;
   }
+}
+
+/* Hide scrollbar utility for touch scrollbars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Bill slip: the cart panel is drawn like the paper bill the shop hands over. */

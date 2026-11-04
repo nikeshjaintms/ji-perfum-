@@ -1,5 +1,7 @@
 import QRCode from 'qrcode';
 import { prisma } from '../../config/prisma.js';
+import { sendWhatsAppInvoice, sanitizeIndianPhone } from '../../services/whatsapp.service.js';
+import { generateInvoicePdfBuffer, saveInvoicePdfLocally } from '../../services/pdf.service.js';
 
 export const createInvoice = async (req, res) => {
   try {
@@ -18,6 +20,28 @@ export const createInvoice = async (req, res) => {
 
     if (!items || !items.length) {
       return res.status(400).json({ success: false, message: 'Invoice must contain at least one item.' });
+    }
+
+    // 0. Customer Name & Phone Validation for WhatsApp Billing
+    const customerName = (customerData?.name || '').trim();
+    const customerPhone = (customerData?.phone || '').trim();
+
+    if (!customerName) {
+      return res.status(400).json({ success: false, message: 'Customer name is required.' });
+    }
+    if (customerName.length < 2) {
+      return res.status(400).json({ success: false, message: 'Customer name must be at least 2 characters.' });
+    }
+    if (!/^[a-zA-Z\s'.\-]{2,60}$/.test(customerName)) {
+      return res.status(400).json({ success: false, message: 'Customer name should only contain letters and spaces.' });
+    }
+
+    const sanitizedPhone = sanitizeIndianPhone(customerPhone);
+    if (!sanitizedPhone || sanitizedPhone.length !== 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid 10-digit mobile number starting with 6, 7, 8, or 9 is required for WhatsApp billing.',
+      });
     }
 
     // 1. Resolve Store & City
@@ -122,20 +146,26 @@ export const createInvoice = async (req, res) => {
 
     // 5. Resolve Customer
     let resolvedCustomerId = customerId || null;
-    if (!resolvedCustomerId && customerData?.phone) {
+    if (!resolvedCustomerId) {
       const existingCust = await prisma.customer.findUnique({
-        where: { phone: customerData.phone.trim() },
+        where: { phone: sanitizedPhone },
       });
       if (existingCust) {
         resolvedCustomerId = existingCust.id;
+        if (existingCust.name !== customerName) {
+          await prisma.customer.update({
+            where: { id: existingCust.id },
+            data: { name: customerName },
+          });
+        }
       } else {
         const newCust = await prisma.customer.create({
           data: {
-            name: customerData.name?.trim() || 'Walk-in Guest',
-            phone: customerData.phone.trim(),
-            email: customerData.email?.trim() || null,
+            name: customerName,
+            phone: sanitizedPhone,
+            email: customerData?.email?.trim() || null,
             city: store.city.name,
-            address: customerData.address?.trim() || null,
+            address: customerData?.address?.trim() || null,
           },
         });
         resolvedCustomerId = newCust.id;
@@ -400,6 +430,30 @@ export const createInvoice = async (req, res) => {
 
     const primaryPayment = result.payments.find((p) => p.status === 'PENDING') || result.payments[0];
 
+    // Save invoice PDF locally to backend/invoices/
+    try {
+      const fullInvoiceForPdf = {
+        ...result.invoice,
+        store,
+        customer: result.invoice.customer || customerData,
+        items: result.invoice.items,
+        payments: result.payments,
+      };
+      await saveInvoicePdfLocally(fullInvoiceForPdf);
+    } catch (saveErr) {
+      console.warn('Failed to save local PDF on invoice creation:', saveErr.message);
+    }
+
+    // Trigger WhatsApp notification if payment is already complete (Cash/Card/Split Direct)
+    let whatsappResult = null;
+    if (result.invoice.paymentStatus === 'PAID') {
+      try {
+        whatsappResult = await sendWhatsAppInvoice(result.invoice);
+      } catch (wsErr) {
+        console.warn('WhatsApp invoice dispatch warning:', wsErr.message);
+      }
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Invoice generated successfully',
@@ -407,6 +461,7 @@ export const createInvoice = async (req, res) => {
         ...result.invoice,
         payment: primaryPayment,
         payments: result.payments,
+        whatsapp: whatsappResult,
         splitDetails: (paymentMethod === 'SPLIT' || paymentMethod === 'CREDIT') ? {
           cashAmount,
           upiAmount,
@@ -431,34 +486,46 @@ export const createInvoice = async (req, res) => {
 
 export const getInvoices = async (req, res) => {
   try {
-    const { search, status, paymentMethod, storeId, cityId, limit = 50, page = 1 } = req.query;
+    const { search, status, paymentMethod, storeId, cityId, limit = 10, page = 1, sortBy, sortOrder } = req.query;
 
     const where = {};
 
-    if (status) {
+    if (status && status !== 'ALL') {
       where.paymentStatus = status;
     }
 
-    if (paymentMethod) {
+    if (paymentMethod && paymentMethod !== 'ALL') {
       where.paymentMethod = paymentMethod;
     }
 
-    if (storeId) {
+    if (storeId && storeId !== 'ALL') {
       where.storeId = storeId;
-    } else if (cityId) {
+    } else if (cityId && cityId !== 'ALL') {
       where.store = { cityId };
     }
 
-    if (search) {
+    if (search && search.trim()) {
+      const q = search.trim();
       where.OR = [
-        { invoiceNumber: { contains: search } },
-        { customer: { name: { contains: search } } },
-        { customer: { phone: { contains: search } } },
+        { invoiceNumber: { contains: q } },
+        { customer: { name: { contains: q } } },
+        { customer: { phone: { contains: q } } },
+        { customer: { email: { contains: q } } },
+        { store: { name: { contains: q } } },
       ];
     }
 
-    const take = Number(limit);
-    const skip = (Number(page) - 1) * take;
+    let orderBy = { createdAt: 'desc' };
+    if (sortBy) {
+      const allowed = ['createdAt', 'invoiceNumber', 'grandTotal', 'paidAmount', 'dueAmount', 'paymentStatus'];
+      if (allowed.includes(sortBy)) {
+        orderBy = { [sortBy]: sortOrder === 'asc' ? 'asc' : 'desc' };
+      }
+    }
+
+    const take = Math.max(1, parseInt(limit, 10) || 10);
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const skip = (pageNum - 1) * take;
 
     const [invoices, total] = await Promise.all([
       prisma.invoice.findMany({
@@ -470,7 +537,7 @@ export const getInvoices = async (req, res) => {
           items: true,
           payments: true,
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         take,
         skip,
       }),
@@ -482,7 +549,7 @@ export const getInvoices = async (req, res) => {
       data: invoices,
       pagination: {
         total,
-        page: Number(page),
+        page: pageNum,
         limit: take,
         totalPages: Math.ceil(total / take),
       },
@@ -668,13 +735,96 @@ export const collectDuePayment = async (req, res) => {
       return { invoice: updatedInvoice, payment: paymentRecord };
     });
 
+    // Trigger WhatsApp notification for payment update
+    let whatsappResult = null;
+    try {
+      whatsappResult = await sendWhatsAppInvoice(result.invoice);
+    } catch (wsErr) {
+      console.warn('WhatsApp collection dispatch warning:', wsErr.message);
+    }
+
     return res.json({
       success: true,
       message: `Successfully collected ₹${numAmount}. Outstanding Due: ₹${result.invoice.dueAmount}`,
-      data: result.invoice,
+      data: {
+        ...result.invoice,
+        whatsapp: whatsappResult,
+      },
     });
   } catch (error) {
     console.error('collectDuePayment error:', error);
     return res.status(500).json({ success: false, message: error.message || 'Failed to collect due payment' });
+  }
+};
+
+/**
+ * Manually trigger or re-send WhatsApp bill for any existing invoice
+ */
+export const sendWhatsAppBill = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        store: { include: { city: true } },
+        items: true,
+        payments: true,
+      },
+    });
+
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: 'Invoice not found.' });
+    }
+
+    const result = await sendWhatsAppInvoice(invoice);
+
+    return res.json({
+      success: true,
+      message: result.message || 'WhatsApp bill processed',
+      data: result,
+    });
+  } catch (error) {
+    console.error('sendWhatsAppBill error:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Failed to dispatch WhatsApp bill' });
+  }
+};
+
+/**
+ * Generate and stream official Tax Invoice PDF directly
+ */
+export const getInvoicePdf = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        store: { include: { city: true } },
+        items: true,
+        payments: true,
+      },
+    });
+
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: 'Invoice not found.' });
+    }
+
+    const pdfBuffer = await generateInvoicePdfBuffer(invoice);
+
+    // Save a copy to local backend/invoices/ folder
+    try {
+      await saveInvoicePdfLocally(invoice, pdfBuffer);
+    } catch (saveErr) {
+      console.warn('Failed to save local PDF in getInvoicePdf:', saveErr.message);
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="JJ-Perfume-Invoice-${invoice.invoiceNumber}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    return res.end(pdfBuffer);
+  } catch (error) {
+    console.error('getInvoicePdf error:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Failed to generate PDF invoice' });
   }
 };

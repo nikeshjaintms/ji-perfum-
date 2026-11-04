@@ -2,6 +2,9 @@ import './config/env.js';
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import authRoutes from './modules/auth/auth.routes.js';
 import usersRoutes from './modules/users/users.routes.js';
 import productsRoutes from './modules/products/products.routes.js';
@@ -10,13 +13,21 @@ import paymentsRoutes from './modules/payments/payments.routes.js';
 import storesRoutes from './modules/stores/stores.routes.js';
 import { prisma } from './config/prisma.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const invoicesDir = path.resolve(__dirname, '../invoices');
+
 const app = express();
+
+// Serve local invoice PDFs statically (e.g. /invoices/JJ-Perfume-Invoice-JJ-2026-0024.pdf)
+app.use('/invoices', express.static(invoicesDir));
 
 // Middleware
 app.use(cors({
   origin: true,
   credentials: true,
 }));
+app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

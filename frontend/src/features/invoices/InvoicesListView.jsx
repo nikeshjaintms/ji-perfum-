@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import DataTable from '../../components/DataTable';
 import { 
   Receipt, 
@@ -17,14 +17,19 @@ import {
   Wallet,
   X,
   AlertCircle,
-  ArrowRight
+  ArrowRight,
+  MessageCircle
 } from 'lucide-react';
 import { billingService } from '../../services/api';
 
 export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stores = [] }) {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [totalInvoices, setTotalInvoices] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL | PENDING | PARTIALLY_PAID | PAID | CANCELLED
   const [selectedStoreFilter, setSelectedStoreFilter] = useState('ALL');
   const [errorMsg, setErrorMsg] = useState('');
@@ -37,37 +42,70 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
   const [collectLoading, setCollectLoading] = useState(false);
   const [collectError, setCollectError] = useState('');
 
-  useEffect(() => {
-    fetchInvoices();
-  }, [statusFilter, selectedStoreFilter]);
-
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
     try {
       setLoading(true);
       setErrorMsg('');
-      const params = {};
+      const params = {
+        page,
+        limit: pageSize,
+      };
       if (statusFilter !== 'ALL') {
         params.status = statusFilter;
       }
       if (selectedStoreFilter !== 'ALL') {
         params.storeId = selectedStoreFilter;
       }
-      if (search) {
-        params.search = search;
+      if (search && search.trim()) {
+        params.search = search.trim();
       }
+      if (sortConfig && sortConfig.key) {
+        params.sortBy = sortConfig.key;
+        params.sortOrder = sortConfig.direction || 'desc';
+      }
+
       const res = await billingService.getInvoices(params);
       setInvoices(res.data || []);
+      if (res.pagination) {
+        setTotalInvoices(res.pagination.total);
+      } else {
+        setTotalInvoices((res.data || []).length);
+      }
     } catch (err) {
       console.error('Failed to fetch invoices:', err);
       setErrorMsg('Failed to load invoices.');
     } finally {
       setLoading(false);
     }
+  }, [page, pageSize, statusFilter, selectedStoreFilter, search, sortConfig]);
+
+  useEffect(() => {
+    fetchInvoices();
+  }, [fetchInvoices]);
+
+  const handleStatusFilterChange = (status) => {
+    setStatusFilter(status);
+    setPage(1);
   };
 
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    fetchInvoices();
+  const handleStoreFilterChange = (storeId) => {
+    setSelectedStoreFilter(storeId);
+    setPage(1);
+  };
+
+  const handleSearchChange = (newSearch) => {
+    setSearch(newSearch);
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (newSize) => {
+    setPageSize(newSize);
+    setPage(1);
+  };
+
+  const handleSortChange = (newSort) => {
+    setSortConfig(newSort);
+    setPage(1);
   };
 
   const handleCancelInvoice = async (invoice) => {
@@ -201,23 +239,26 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
       header: 'Items',
       sortAccessor: (inv) => inv.items?.length || 0,
       sortable: true,
-      className: 'text-slate-500 font-light',
+      className: 'text-slate-500 font-light whitespace-nowrap',
+      headerClassName: 'whitespace-nowrap',
       render: (_, inv) => `${inv.items?.length || 0} fragrance${inv.items?.length !== 1 ? 's' : ''}`,
     },
     {
       key: 'paymentMethod',
       header: 'Paid by',
       sortable: true,
+      className: 'whitespace-nowrap',
+      headerClassName: 'whitespace-nowrap',
       render: (_, inv) => (
-        <div>
-          <span className={`inline-flex items-center space-x-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border ${
+        <div className="whitespace-nowrap">
+          <span className={`inline-flex items-center space-x-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap ${
             inv.paymentMethod === 'SPLIT' ? 'bg-amber-50 border-amber-300 text-amber-800' :
             inv.paymentMethod === 'CREDIT' ? 'bg-rose-50 border-rose-300 text-rose-800' :
             inv.paymentMethod === 'CASH' ? 'bg-emerald-50 border-emerald-300 text-emerald-800' :
             inv.paymentMethod === 'CARD' ? 'bg-purple-50 border-purple-300 text-purple-800' :
             'bg-slate-100 border-slate-200 text-slate-700'
           }`}>
-            <span>
+            <span className="whitespace-nowrap">
               {inv.paymentMethod === 'UPI_QR' ? 'UPI QR' :
                inv.paymentMethod === 'SPLIT' ? 'Split' :
                inv.paymentMethod === 'CREDIT' ? 'On credit' :
@@ -225,7 +266,7 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
             </span>
           </span>
           {inv.notes && (inv.notes.includes('Split:') || inv.notes.includes('Credit')) && (
-            <span className="block text-[11px] text-slate-500 tabular-nums mt-0.5 truncate max-w-[170px]">
+            <span className="block text-[11px] text-slate-500 tabular-nums mt-0.5 truncate max-w-[170px] whitespace-nowrap">
               {inv.notes.split('|').find((n) => n.includes('Split:') || n.includes('Credit'))?.trim()}
             </span>
           )}
@@ -236,6 +277,8 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
       key: 'paymentStatus',
       header: 'Status',
       sortable: true,
+      className: 'whitespace-nowrap',
+      headerClassName: 'whitespace-nowrap',
       render: (_, inv) => {
         const isPaid = inv.paymentStatus === 'PAID';
         const isPartiallyPaid = inv.paymentStatus === 'PARTIALLY_PAID';
@@ -243,37 +286,37 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
         const isCancelled = inv.paymentStatus === 'CANCELLED';
 
         return (
-          <>
+          <div className="whitespace-nowrap">
             {isPaid && (
-              <span className="inline-flex items-center space-x-1.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span>Paid</span>
+              <span className="inline-flex items-center space-x-1.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                <span className="whitespace-nowrap">Paid</span>
               </span>
             )}
             {isPartiallyPaid && (
-              <div className="flex flex-col items-start gap-0.5">
-                <span className="inline-flex items-center space-x-1.5 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600 animate-pulse" />
-                  <span>Part paid</span>
+              <div className="flex flex-col items-start gap-0.5 whitespace-nowrap">
+                <span className="inline-flex items-center space-x-1.5 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600 animate-pulse shrink-0" />
+                  <span className="whitespace-nowrap">Part paid</span>
                 </span>
-                <span className="text-[11px] text-rose-600 tabular-nums pl-1">
+                <span className="text-[11px] text-rose-600 tabular-nums pl-1 whitespace-nowrap">
                   ₹{Number(inv.dueAmount || 0).toFixed(2)}
                 </span>
               </div>
             )}
             {isPending && (
-              <span className="inline-flex items-center space-x-1.5 text-[11px] font-medium text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-0.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
-                <span>Awaiting payment</span>
+              <span className="inline-flex items-center space-x-1.5 text-[11px] font-medium text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse shrink-0" />
+                <span className="whitespace-nowrap">Awaiting payment</span>
               </span>
             )}
             {isCancelled && (
-              <span className="inline-flex items-center space-x-1.5 text-[11px] font-medium text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                <span>Cancelled</span>
+              <span className="inline-flex items-center space-x-1.5 text-[11px] font-medium text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                <span className="whitespace-nowrap">Cancelled</span>
               </span>
             )}
-          </>
+          </div>
         );
       },
     },
@@ -284,21 +327,22 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
       sortable: true,
       align: 'right',
       className: 'tabular-nums whitespace-nowrap',
+      headerClassName: 'whitespace-nowrap',
       render: (_, inv) => {
         const hasDue = Number(inv.dueAmount || 0) > 0.01;
         const isCancelled = inv.paymentStatus === 'CANCELLED';
         return (
-          <div>
-            <div className="font-semibold text-slate-900">
+          <div className="whitespace-nowrap">
+            <div className="font-semibold text-slate-900 whitespace-nowrap">
               ₹{Number(inv.grandTotal).toFixed(2)}
             </div>
             {hasDue && !isCancelled && (
-              <div className="text-[11px] text-rose-600 font-medium">
+              <div className="text-[11px] text-rose-600 font-medium whitespace-nowrap">
                 Due: ₹{Number(inv.dueAmount).toFixed(2)}
               </div>
             )}
             {Number(inv.paidAmount || 0) > 0 && hasDue && (
-              <div className="text-[11px] text-emerald-600">
+              <div className="text-[11px] text-emerald-600 whitespace-nowrap">
                 Recd: ₹{Number(inv.paidAmount).toFixed(2)}
               </div>
             )}
@@ -312,6 +356,7 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
       sortable: false,
       align: 'center',
       className: 'whitespace-nowrap',
+      headerClassName: 'whitespace-nowrap',
       render: (_, inv) => {
         const hasDue = Number(inv.dueAmount || 0) > 0.01;
         const isCancelled = inv.paymentStatus === 'CANCELLED';
@@ -341,6 +386,24 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
               </button>
             )}
 
+            {inv.customer?.phone && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const clean = (inv.customer.phone || '').replace(/\D/g, '').slice(-10);
+                  if (clean) {
+                    const text = `*JJ PERFUME - INVOICE ${inv.invoiceNumber}*\nDear ${inv.customer.name || 'Customer'},\nThank you for shopping at JJ Perfume!\nGrand Total: ₹${Number(inv.grandTotal).toFixed(2)} (${inv.paymentStatus})\nVisit us again soon! 🌸`;
+                    window.open(`https://api.whatsapp.com/send?phone=91${clean}&text=${encodeURIComponent(text)}`, '_blank');
+                    billingService.sendWhatsApp(inv.id).catch(() => {});
+                  }
+                }}
+                className="p-1.5 text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition cursor-pointer"
+                title={`Send bill to WhatsApp (+91 ${inv.customer.phone})`}
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             <button
               onClick={(e) => { e.stopPropagation(); onOpenPrintModal(inv); }}
               className="p-1.5 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
@@ -365,7 +428,7 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
   ], []);
 
   return (
-    <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div className="max-w-[1700px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
       
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
@@ -375,15 +438,15 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
         </div>
 
         {/* Search Bar & City Selector */}
-        <div className="flex items-center space-x-2.5 w-full sm:w-auto">
+        <div className="flex items-center space-x-2 w-full sm:w-auto min-w-0">
           {/* City / Store Filter */}
           {stores.length > 0 && (
-            <div className="flex items-center bg-white border border-slate-200 hover:border-slate-300 rounded-full px-3 py-1.5 text-xs text-slate-700 shadow-sm transition">
+            <div className="flex items-center bg-white border border-slate-200 hover:border-slate-300 rounded-full px-2.5 sm:px-3 py-1.5 text-xs text-slate-700 shadow-sm transition min-w-0 flex-1 sm:flex-initial">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600 mr-2" />
               <select
                 value={selectedStoreFilter}
-                onChange={(e) => setSelectedStoreFilter(e.target.value)}
-                className="bg-transparent text-slate-900 text-xs font-medium focus:outline-none cursor-pointer pr-1"
+                onChange={(e) => handleStoreFilterChange(e.target.value)}
+                className="bg-transparent text-slate-900 text-xs font-medium focus:outline-none cursor-pointer pr-1 truncate w-full max-w-[180px] min-[360px]:max-w-[210px] sm:max-w-xs"
               >
                 <option value="ALL" className="bg-white text-slate-900">All Outlets</option>
                 {stores.map((st) => (
@@ -395,16 +458,7 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
             </div>
           )}
 
-          <form onSubmit={handleSearchSubmit} className="relative flex-1 sm:w-64">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-2.5 pointer-events-none" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search invoice, guest, phone..."
-              className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 focus:border-amber-500 rounded-full text-xs text-slate-900 placeholder-slate-400 focus:outline-none shadow-sm transition font-sans"
-            />
-          </form>
+          
 
           <button
             onClick={fetchInvoices}
@@ -416,30 +470,32 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
         </div>
       </div>
 
-      {/* Status Filter Tabs */}
-      <div className="flex items-center gap-5 mb-4 overflow-x-auto border-b border-slate-200">
+      {/* Status Filter Pills (Clean Wrap, Zero Horizontal Scroll) */}
+      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-4">
         {[
-          { id: 'ALL', label: 'All' },
-          { id: 'PARTIALLY_PAID', label: 'Money due' },
-          { id: 'PENDING', label: 'Awaiting payment' },
-          { id: 'PAID', label: 'Paid' },
-          { id: 'CANCELLED', label: 'Cancelled' },
+          { id: 'ALL', label: 'All Invoices' },
+          { id: 'PARTIALLY_PAID', label: 'Money due', dot: 'bg-amber-500' },
+          { id: 'PENDING', label: 'Awaiting payment', dot: 'bg-sky-500' },
+          { id: 'PAID', label: 'Paid in full', dot: 'bg-emerald-500' },
+          { id: 'CANCELLED', label: 'Cancelled', dot: 'bg-rose-500' },
         ].map((tab) => {
           const isActive = statusFilter === tab.id;
           return (
             <button
               key={tab.id}
               id={`filter-tab-${tab.id}`}
-              onClick={() => setStatusFilter(tab.id)}
-              className={`pb-2 text-sm whitespace-nowrap border-b-2 -mb-px ${
- isActive
- ? tab.id === 'PARTIALLY_PAID'
- ? 'border-amber-500 text-slate-900 font-semibold'
- : 'border-amber-500 text-slate-900 font-semibold'
- : 'border-transparent text-slate-500 hover:text-slate-900'
- }`}
+              type="button"
+              onClick={() => handleStatusFilterChange(tab.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                isActive
+                  ? 'bg-amber-500 text-white font-semibold shadow-xs'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 shadow-2xs'
+              }`}
             >
-              {tab.label}
+              {tab.dot && (
+                <span className={`w-1.5 h-1.5 rounded-full ${tab.dot} ${isActive ? 'ring-1 ring-white' : ''} shrink-0`} />
+              )}
+              <span className="whitespace-nowrap">{tab.label}</span>
             </button>
           );
         })}
@@ -450,6 +506,16 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
         columns={columns}
         data={invoices}
         loading={loading}
+        serverSide={true}
+        totalCount={totalInvoices}
+        page={page}
+        onPageChange={setPage}
+        pageSize={pageSize}
+        onPageSizeChange={handlePageSizeChange}
+        searchValue={search}
+        onSearchChange={handleSearchChange}
+        sortConfig={sortConfig}
+        onSortChange={handleSortChange}
         searchPlaceholder="Instant search invoice #, customer, phone, counter..."
         defaultPageSize={10}
         pageSizeOptions={[10, 25, 50, 100]}
@@ -461,8 +527,8 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
 
       {/* Collect Due Settlement Modal */}
       {selectedDueInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 ">
-          <div className="bg-white border border-slate-200 rounded-lg w-full max-w-md shadow-lg overflow-hidden p-6 text-left relative text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/50 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md shadow-2xl overflow-hidden p-4 sm:p-6 text-left relative text-slate-900 my-auto max-h-[92vh] overflow-y-auto no-scrollbar">
             <button
               onClick={() => setSelectedDueInvoice(null)}
               className="absolute top-5 right-5 text-slate-400 hover:text-slate-900 transition p-1 rounded-full hover:bg-slate-100"
@@ -510,7 +576,7 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
                   <button
                     type="button"
                     onClick={() => setCollectAmount(Number(selectedDueInvoice.dueAmount).toFixed(2))}
-                    className="text-xs text-amber-700 hover:underline transition font-semibold"
+                    className="text-xs text-amber-700 hover:underline transition font-semibold whitespace-nowrap"
                   >
                     Collect Full Due
                   </button>
@@ -536,7 +602,7 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
                 <label className="block text-xs font-medium text-slate-700 mb-1.5">
                   Payment method
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                   {[
                     { id: 'CASH', label: 'Cash', icon: Banknote },
                     { id: 'CARD', label: 'Card Swipe', icon: CreditCard },
@@ -549,14 +615,14 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
                         key={m.id}
                         type="button"
                         onClick={() => setCollectMethod(m.id)}
-                        className={`flex items-center justify-center space-x-1.5 py-2 px-2 rounded-md text-xs font-medium border transition ${
- isSelected
- ? 'bg-amber-50 border-amber-400 text-amber-950 shadow-sm font-semibold'
- : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
- }`}
+                        className={`flex items-center justify-center space-x-1.5 py-2 px-2 rounded-md text-xs font-medium border transition whitespace-nowrap shrink-0 ${
+                          isSelected
+                            ? 'bg-amber-50 border-amber-400 text-amber-950 shadow-sm font-semibold'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
                       >
-                        <Icon className="w-3.5 h-3.5" />
-                        <span>{m.label}</span>
+                        <Icon className="w-3.5 h-3.5 shrink-0" />
+                        <span className="whitespace-nowrap">{m.label}</span>
                       </button>
                     );
                   })}
@@ -585,11 +651,11 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
               )}
 
               {/* Submit Buttons */}
-              <div className="flex space-x-2.5 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setSelectedDueInvoice(null)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-medium transition"
+                  className="w-full sm:flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -597,7 +663,7 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
                   type="submit"
                   id="confirm-collect-due-btn"
                   disabled={collectLoading}
-                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-lg transition disabled:opacity-50"
+                  className="w-full sm:flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-md transition disabled:opacity-50 cursor-pointer"
                 >
                   {collectLoading ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
