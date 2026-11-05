@@ -170,6 +170,7 @@ export async function sendWhatsAppInvoice(invoice) {
 
         // --- STEP 1: Generate & Upload Official A4 Tax Invoice PDF to Meta Media ---
         let pdfMediaId = null;
+        let uploadData = null;
         try {
           const pdfBuffer = await generateInvoicePdfBuffer(invoice);
           // Save a permanent local copy to backend/invoices/
@@ -199,7 +200,7 @@ export async function sendWhatsAppInvoice(invoice) {
             body: formData,
           });
 
-          const uploadData = await uploadRes.json().catch(() => null);
+          uploadData = await uploadRes.json().catch(() => null);
           if (uploadRes.ok && uploadData?.id) {
             pdfMediaId = uploadData.id;
             console.log(`[WhatsApp] PDF invoice uploaded. Media ID: ${pdfMediaId}`);
@@ -378,7 +379,9 @@ export async function sendWhatsAppInvoice(invoice) {
           apiMessage = 'Bill PDF & message dispatched successfully!';
           console.log(`[WhatsApp] Success via Meta Gateway:`, { docSent, templateData, textData });
         } else {
-          apiMessage = docData?.error?.message || templateData?.error?.message || textData?.error?.message || `Meta API error`;
+          const parseError = (d) => !d ? null : (typeof d.error === 'string' ? d.error : (d.error?.message || (typeof d.message === 'string' ? d.message : null)));
+          const errDetail = parseError(uploadData) || parseError(docData) || parseError(templateData) || parseError(textData);
+          apiMessage = errDetail ? `Meta API: ${errDetail}` : `Meta API error`;
           console.warn(`[WhatsApp] Meta Gateway response:`, { docData, templateData, textData });
         }
       } catch (metaErr) {
