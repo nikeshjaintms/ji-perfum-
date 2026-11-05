@@ -204,42 +204,38 @@ export default function NewBillModal({
                 New Bill
               </h3>
               <p className="text-[11px] text-slate-500">
-                {selectedStore?.name || 'Counter'}{selectedStore?.city?.name ? `, ${selectedStore.city.name}` : ''} · {cartCount} {cartCount === 1 ? 'item' : 'items'}
+                {selectedStore?.name || 'Counter'}{selectedStore?.city?.name ? `, ${selectedStore.city.name}` : ''} · {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · {cartCount} {cartCount === 1 ? 'item' : 'items'}
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            id="close-new-bill-modal-btn"
-            onClick={onClose}
-            className="px-2.5 py-1 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80 rounded-lg transition cursor-pointer flex items-center space-x-1 text-xs font-medium border border-slate-200"
-            title="Close bill"
-          >
-            <span>Close</span>
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* Bill Slip Content */}
-        <div className="bill-slip px-1 pt-1 pb-2">
-          <div className="flex items-baseline justify-between">
-            <h2 className="font-serif text-xl sm:text-2xl font-semibold text-slate-900">New bill</h2>
+          <div className="flex items-center gap-1.5">
             {cart.length > 0 && (
               <button
                 type="button"
                 onClick={clearCart}
-                className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-rose-700 hover:bg-rose-50 px-2 py-0.5 rounded transition cursor-pointer"
+                className="px-2 py-1 text-slate-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer flex items-center space-x-1 text-xs font-medium border border-transparent hover:border-rose-200"
+                title="Clear all items from bill"
               >
-                <Trash2 className="w-3 h-3 text-slate-400 hover:text-rose-600" />
+                <Trash2 className="w-3.5 h-3.5" />
                 <span>Clear</span>
               </button>
             )}
+            <button
+              type="button"
+              id="close-new-bill-modal-btn"
+              onClick={onClose}
+              className="px-2.5 py-1 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80 rounded-lg transition cursor-pointer flex items-center space-x-1 text-xs font-medium border border-slate-200"
+              title="Close bill"
+            >
+              <span>Close</span>
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            {selectedStore?.name}{selectedStore?.city?.name ? `, ${selectedStore.city.name}` : ''} · {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </p>
+        </div>
 
-          <div className="mt-4">
+        {/* Bill Slip Content */}
+        <div className="bill-slip px-1 pt-1 pb-2">
+          <div className="mt-1">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-semibold text-slate-800">Customer Details</span>
               <span className="text-[11px] text-emerald-800 flex items-center gap-1 font-medium bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -266,12 +262,12 @@ export default function NewBillModal({
                       nameError
                         ? 'border-rose-500 focus:border-rose-600 bg-rose-50/20 ring-1 ring-rose-400/40'
                         : isNameValid
-                        ? 'border-emerald-500 focus:border-emerald-600'
+                        ? 'border-amber-500 focus:border-amber-600'
                         : 'border-slate-300 focus:border-amber-500'
                     }`}
                   />
                   {isNameValid && (
-                    <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-emerald-600">
+                    <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-amber-600">
                       <Check className="w-3.5 h-3.5" />
                     </div>
                   )}
@@ -302,12 +298,12 @@ export default function NewBillModal({
                       phoneError
                         ? 'border-rose-500 focus:border-rose-600 bg-rose-50/20 ring-1 ring-rose-400/40'
                         : isPhoneValid
-                        ? 'border-emerald-500 focus:border-emerald-600'
+                        ? 'border-amber-500 focus:border-amber-600'
                         : 'border-slate-300 focus:border-amber-500'
                     }`}
                   />
                   {isPhoneValid && (
-                    <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-emerald-600">
+                    <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-amber-600">
                       <Check className="w-3.5 h-3.5" />
                     </div>
                   )}

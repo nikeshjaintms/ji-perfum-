@@ -5,45 +5,52 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Paper and ink: the neutrals are tinted toward the aubergine-black of
-        // the shop's printed bills instead of the default cold slate.
-        paper: '#F2F0EE',
+        // Luxury crisp porcelain surface for main view wrappers
+        paper: '#F8FAFC',
         slate: {
-          50: '#F8F7F6',
-          100: '#EFEDEB',
-          200: '#E2DFDC',
-          300: '#CBC7C3',
-          400: '#A29D99',
-          500: '#77716E',
-          600: '#57514F',
-          700: '#3F3A3A',
-          800: '#2E2830',
-          900: '#231C25',
-          950: '#170F19',
+          50: '#F8FAFC',
+          100: '#F1F5F9',
+          200: '#E2E8F0',
+          300: '#CBD5E1',
+          400: '#94A3B8',
+          500: '#64748B',
+          600: '#475569',
+          700: '#334155',
+          800: '#1E293B',
+          900: '#0F172A',
+          950: '#020617',
         },
-        // Bottle green. Existing `amber-*` classes now resolve to this, so every
-        // screen picks up the accent without touching each class.
+        // Royal Sapphire Brand Blue: centered on rgb(34 68 164) / #2244A4
+        // Mapped to existing accent tokens so all buttons, tabs, pills and focus rings adopt this exact blue uniformly
         amber: {
-          50: '#F1F5F2',
-          100: '#E1EBE5',
-          200: '#C3D6CB',
-          300: '#9DBBAB',
-          400: '#5E8D7A',
-          500: '#2F5D4E',
-          600: '#264C40',
-          700: '#1F3E34',
-          800: '#18312A',
-          900: '#112320',
-          950: '#0A1613',
+          50: '#F0F4FC',
+          100: '#DFE8F8',
+          200: '#C3D4F3',
+          300: '#9CB9EB',
+          400: '#5F8CDC',
+          500: '#2244A4', // rgb(34 68 164)
+          600: '#1C3786',
+          700: '#162C6B',
+          800: '#102150',
+          900: '#0B1637',
+          950: '#060D20',
         },
-        brass: '#9A7430',
+        // Luxury Champagne Gold accents
+        brass: '#D4AF37',
+        gold: {
+          300: '#F3E5AB',
+          400: '#E2B755',
+          500: '#D4AF37',
+          600: '#C5A059',
+          700: '#B08D45',
+        },
       },
       fontFamily: {
         sans: ['"Instrument Sans"', 'system-ui', 'sans-serif'],
         serif: ['Newsreader', 'Georgia', 'serif'],
       },
       boxShadow: {
-        slip: '0 1px 0 rgba(35,28,37,.06), 0 12px 28px -18px rgba(35,28,37,.35)',
+        slip: '0 1px 0 rgba(15,23,42,.06), 0 12px 28px -18px rgba(15,23,42,.25)',
       },
     },
   },

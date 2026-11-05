@@ -133,7 +133,7 @@ export default function ChangePasswordModal({ isOpen, onClose, currentUser }) {
         className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-150"
       >
         {/* Header decoration */}
-        <div className="h-1.5 bg-gradient-to-r from-amber-400 via-amber-500 to-emerald-600" />
+        <div className="h-1.5 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-700" />
 
         <div className="p-6">
           {/* Header Row */}
@@ -340,7 +340,7 @@ export default function ChangePasswordModal({ isOpen, onClose, currentUser }) {
               <button
                 type="submit"
                 disabled={loading || !!successMsg}
-                className="px-5 py-2 text-xs font-medium text-white bg-[#2F5D4E] hover:bg-[#254b3e] active:scale-[0.98] rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                className="px-5 py-2 text-xs font-medium text-white bg-[#2244A4] hover:bg-[#1C3786] active:bg-[#162C6B] active:scale-[0.98] rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <>
