@@ -106,31 +106,6 @@ export default function Navbar({
 
           {/* Right: Store Selector, User Profile & Logout & 3-Line Mobile Button */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs sm:text-sm shrink-0 relative z-10">
-            {/* Store / Outlet Selector (Desktop >= md) */}
-            {stores && stores.length > 0 && (
-              <div className="hidden md:flex items-center space-x-1.5 shrink min-w-0 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/90 rounded-xl px-2.5 py-1 text-xs transition shadow-2xs">
-                <Store className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <div className="flex flex-col min-w-0 text-left">
-                  <span className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold leading-none">Outlet</span>
-                  <select
-                    value={selectedStore?.id || ''}
-                    onChange={(e) => {
-                      const found = stores.find((s) => s.id === e.target.value);
-                      if (found) onSelectStore(found);
-                    }}
-                    aria-label="Select Counter or Outlet"
-                    className="bg-transparent border-0 font-medium text-slate-900 focus:outline-none cursor-pointer text-xs truncate max-w-[130px] p-0 pr-1"
-                  >
-                    {stores.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.name} ({st.city?.name || 'Counter'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-
             {currentUser && (
               <button
                 type="button"
