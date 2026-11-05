@@ -563,11 +563,11 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
                   title="Show in-stock fragrances only"
                   className={`px-2.5 py-1.5 rounded-md text-xs transition cursor-pointer flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                     inStockOnly
-                      ? 'bg-emerald-600 text-white shadow-xs font-semibold'
+                      ? 'bg-amber-500 text-white shadow-xs font-semibold'
                       : 'text-slate-600 hover:text-slate-900 font-medium'
                   }`}
                 >
-                  <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${inStockOnly ? 'text-white' : 'text-emerald-600'}`} />
+                  <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${inStockOnly ? 'text-white' : 'text-amber-600'}`} />
                   <span className="text-[11px] whitespace-nowrap">In stock</span>
                 </button>
                 <button

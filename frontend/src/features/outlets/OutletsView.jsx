@@ -215,7 +215,7 @@ export default function OutletsView({ onStoreCreated = null }) {
         headerClassName: 'whitespace-nowrap',
         render: (val) =>
           val ? (
-            <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-medium">
+            <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-medium">
               {val}
             </span>
           ) : (

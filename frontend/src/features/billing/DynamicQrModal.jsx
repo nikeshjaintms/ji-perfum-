@@ -117,7 +117,8 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
     if (whatsappState?.whatsappUrl) return whatsappState.whatsappUrl;
     if (!cleanPhone) return null;
     const pdfUrl = getInvoicePdfUrl(invoiceData.id);
-    const text = `✨ *JJ PERFUME - TAX INVOICE* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nDear *${customerName}*,\nThank you for shopping at *JJ PERFUME*!\n\n🧾 *Bill Number:* ${invoiceData.invoiceNumber}\n💰 *Grand Total:* ₹${grandTotal.toFixed(2)}\n💳 *Payment:* ${invoiceData.paymentMethod || 'UPI QR'} · *${isPaid ? 'PAID IN FULL ✅' : 'PARTIALLY PAID ⏳'}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📄 *Download Official PDF Invoice:*\n${pdfUrl}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📍 Outlet: JJ PERFUME, Mandvi\nWe hope you love your fragrance! Visit us again soon. 🌸`;
+    const storeName = invoiceData.store?.name || 'JI Perfume';
+    const text = `✨ *${storeName.toUpperCase()} - TAX INVOICE* ✨\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nDear *${customerName}*,\nThank you for shopping at *${storeName}*!\n\n🧾 *Bill Number:* ${invoiceData.invoiceNumber}\n💰 *Grand Total:* ₹${grandTotal.toFixed(2)}\n💳 *Payment:* ${invoiceData.paymentMethod || 'UPI QR'} · *${isPaid ? 'PAID IN FULL ✅' : 'PARTIALLY PAID ⏳'}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📄 *Download Official PDF Invoice:*\n${pdfUrl}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📍 Outlet: ${storeName}${invoiceData.store?.city?.name ? `, ${invoiceData.store.city.name}` : ''}\nWe hope you love your fragrance! Visit us again soon. 🌸`;
     return `https://api.whatsapp.com/send?phone=91${cleanPhone}&text=${encodeURIComponent(text)}`;
   };
 
@@ -314,7 +315,7 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
 
           <div className="text-xs text-slate-500 flex items-center space-x-1.5 font-light">
             <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
-            <span>Payee: <strong className="text-slate-900 font-medium">JJ Perfume</strong> (ICICI UPI)</span>
+            <span>Payee: <strong className="text-slate-900 font-medium">{invoiceData.store?.name || 'JI Perfume'}</strong> (ICICI UPI)</span>
           </div>
 
           {/* Copy UPI Link Button */}
@@ -342,7 +343,7 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
                 <button
                   onClick={handleConfirmPayment}
                   disabled={isConfirming}
-                  className="px-4 py-2 bg-emerald-700 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center space-x-1.5 whitespace-nowrap"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center space-x-1.5 whitespace-nowrap cursor-pointer"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>{isConfirming ? 'Checking…' : 'Mark as paid'}</span>

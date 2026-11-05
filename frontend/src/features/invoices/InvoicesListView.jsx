@@ -254,7 +254,7 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
           <span className={`inline-flex items-center space-x-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap ${
             inv.paymentMethod === 'SPLIT' ? 'bg-amber-50 border-amber-300 text-amber-800' :
             inv.paymentMethod === 'CREDIT' ? 'bg-rose-50 border-rose-300 text-rose-800' :
-            inv.paymentMethod === 'CASH' ? 'bg-emerald-50 border-emerald-300 text-emerald-800' :
+            inv.paymentMethod === 'CASH' ? 'bg-amber-50 border-amber-300 text-amber-800' :
             inv.paymentMethod === 'CARD' ? 'bg-purple-50 border-purple-300 text-purple-800' :
             'bg-slate-100 border-slate-200 text-slate-700'
           }`}>
@@ -392,7 +392,8 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
                   e.stopPropagation();
                   const clean = (inv.customer.phone || '').replace(/\D/g, '').slice(-10);
                   if (clean) {
-                    const text = `*JJ PERFUME - INVOICE ${inv.invoiceNumber}*\nDear ${inv.customer.name || 'Customer'},\nThank you for shopping at JJ Perfume!\nGrand Total: ₹${Number(inv.grandTotal).toFixed(2)} (${inv.paymentStatus})\nVisit us again soon! 🌸`;
+                    const brandName = (inv.store?.name || 'JI Perfume').toUpperCase();
+                    const text = `*${brandName} - INVOICE ${inv.invoiceNumber}*\nDear ${inv.customer.name || 'Customer'},\nThank you for shopping at ${inv.store?.name || 'JI Perfume'}!\nGrand Total: ₹${Number(inv.grandTotal).toFixed(2)} (${inv.paymentStatus})\nVisit us again soon! 🌸`;
                     window.open(`https://api.whatsapp.com/send?phone=91${clean}&text=${encodeURIComponent(text)}`, '_blank');
                     billingService.sendWhatsApp(inv.id).catch(() => {});
                   }

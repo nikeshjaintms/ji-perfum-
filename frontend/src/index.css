@@ -11,7 +11,7 @@
     max-width: 100%;
   }
   :focus-visible {
-    outline: 2px solid #2F5D4E;
+    outline: 2px solid rgb(34, 68, 164);
     outline-offset: 2px;
   }
 }
@@ -68,7 +68,7 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(47, 93, 78, 0.6);
+  background: rgba(34, 68, 164, 0.6);
 }
 
 /* Print Styles: Hide all ERP navigation and modals, show only the print container */
