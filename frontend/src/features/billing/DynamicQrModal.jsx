@@ -17,7 +17,9 @@ import {
   MessageCircle,
   Send,
   RefreshCw,
-  FileDown
+  FileDown,
+  AlertTriangle,
+  AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { paymentService, billingService, getInvoicePdfUrl } from '../../services/api';
@@ -71,6 +73,11 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
         setTxRef(res.data.transactionReference);
         if (res.data.whatsapp) {
           setWhatsappState(res.data.whatsapp);
+          if (!res.data.whatsapp.success) {
+            console.error('[WhatsApp Delivery Error on Mark As Paid]:', res.data.whatsapp.message);
+          } else {
+            console.log('[WhatsApp Delivery Success]:', res.data.whatsapp);
+          }
         }
         confetti({
           particleCount: 80,
@@ -95,15 +102,21 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
       setIsSendingWa(true);
       setWaFeedback('');
       const res = await billingService.sendWhatsApp(invoiceData.id);
-      if (res.success && res.data) {
-        setWhatsappState(res.data);
-        setWaFeedback('Bill sent to WhatsApp!');
-        setTimeout(() => setWaFeedback(''), 4000);
+      const waData = res.data?.data || res.data;
+      if (waData) {
+        setWhatsappState(waData);
+        if (waData.success) {
+          setWaFeedback('Bill sent to WhatsApp successfully!');
+        } else {
+          setWaFeedback(waData.message || 'WhatsApp delivery failed via API.');
+        }
+        setTimeout(() => setWaFeedback(''), 5000);
       }
     } catch (err) {
       console.error('WhatsApp re-send error:', err);
-      setWaFeedback('Could not send via API');
-      setTimeout(() => setWaFeedback(''), 4000);
+      const errMsg = err.response?.data?.message || err.message || 'Could not send via API';
+      setWaFeedback(`Error: ${errMsg}`);
+      setTimeout(() => setWaFeedback(''), 5000);
     } finally {
       setIsSendingWa(false);
     }
@@ -353,66 +366,116 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
           )}
 
           {/* WhatsApp Bill Dispatch Status & Action */}
-          {isPaid && cleanPhone && (
-            <div className={`w-full p-3.5 rounded-xl border flex flex-col sm:flex-row items-center justify-between gap-3 text-left transition ${
-              whatsappState?.success
+          {isPaid && (
+            <div className={`w-full p-3.5 rounded-xl border text-left transition ${
+              !cleanPhone
+                ? 'bg-amber-50/90 border-amber-300 text-amber-950'
+                : whatsappState?.success
                 ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
-                : 'bg-amber-50/80 border-amber-300 text-amber-950'
+                : 'bg-rose-50/90 border-rose-300 text-rose-950'
             }`}>
-              <div className="flex items-center space-x-2.5">
-                <div className={`p-2 rounded-full shadow-xs shrink-0 text-white ${
-                  whatsappState?.success ? 'bg-emerald-600' : 'bg-amber-600'
-                }`}>
-                  <MessageCircle className="w-4 h-4" />
+              {!cleanPhone ? (
+                <div className="flex items-center space-x-2.5">
+                  <div className="p-2 rounded-full shadow-xs shrink-0 text-white bg-amber-600">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-semibold flex items-center gap-1.5">
+                      <span>WhatsApp Bill Skipped</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-amber-200 text-amber-900">
+                        Missing Mobile
+                      </span>
+                    </h4>
+                    <p className="text-xs text-amber-800 mt-1">
+                      No valid 10-digit customer mobile number found for <strong>{customerName}</strong>. Please add customer phone to send bills via WhatsApp.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-xs font-semibold flex items-center gap-1.5">
-                    <span>{whatsappState?.success ? 'Bill Auto-Sent to WhatsApp' : 'WhatsApp Delivery'}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                      whatsappState?.success ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
-                    }`}>
-                      {whatsappState?.success ? 'Delivered / Queued' : 'Gateway Status'}
-                    </span>
-                  </h4>
-                  <p className="text-[11px] mt-0.5 opacity-90">
-                    To: <strong className="font-semibold">+91 {cleanPhone}</strong> ({customerName})
-                  </p>
-                  {whatsappState?.message && (
-                    <p className={`text-[10px] font-medium mt-0.5 ${
-                      whatsappState?.success ? 'text-emerald-700' : 'text-rose-700'
-                    }`}>
-                      {whatsappState.message}
+              ) : (
+                <div className="flex flex-col gap-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start space-x-2.5">
+                      <div className={`p-2 rounded-full shadow-xs shrink-0 text-white mt-0.5 ${
+                        whatsappState?.success ? 'bg-emerald-600' : 'bg-rose-600'
+                      }`}>
+                        {whatsappState?.success ? (
+                          <MessageCircle className="w-4 h-4" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4" />
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-semibold flex items-center gap-1.5 flex-wrap">
+                          <span>{whatsappState?.success ? 'Bill Auto-Sent to WhatsApp' : 'WhatsApp Delivery Status'}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                            whatsappState?.success 
+                              ? 'bg-emerald-200 text-emerald-900' 
+                              : 'bg-rose-200 text-rose-900 border border-rose-300'
+                          }`}>
+                            {whatsappState?.success ? 'Delivered / Queued' : 'API Action Needed'}
+                          </span>
+                        </h4>
+                        <p className="text-xs mt-0.5 opacity-90">
+                          Recipient: <strong className="font-semibold">+91 {cleanPhone}</strong> ({customerName})
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                      {getDirectWhatsAppUrl() && (
+                        <button
+                          type="button"
+                          onClick={handleOpenWhatsAppWithPdf}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-semibold flex items-center space-x-1.5 transition shadow-sm cursor-pointer whitespace-nowrap"
+                          title="Downloads PDF Bill & Opens WhatsApp chat"
+                        >
+                          <Send className="w-3 h-3 text-white" />
+                          <span>Send on WhatsApp</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleResendWhatsApp}
+                        disabled={isSendingWa}
+                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                        title="Trigger auto-send via API"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isSendingWa ? 'animate-spin' : ''}`} />
+                        <span>{isSendingWa ? 'Sending…' : 'Retry API'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Validation / Error Callout Banner */}
+                  {!whatsappState?.success && whatsappState?.message && (
+                    <div className="p-2.5 bg-white/90 border border-rose-200 rounded-lg text-xs text-rose-900 flex items-start gap-2 shadow-2xs">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="font-semibold text-rose-950">
+                          {whatsappState.message}
+                        </p>
+                        <p className="text-[11px] text-rose-800 mt-0.5">
+                          💡 <strong>Fast Alternative:</strong> Click the green <strong>"Send on WhatsApp"</strong> button above to download the PDF bill and open the customer's chat with 1 click.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Success notification */}
+                  {whatsappState?.success && (
+                    <p className="text-xs text-emerald-800 font-medium">
+                      ✅ {whatsappState.message || 'Bill and tax invoice PDF dispatched to customer WhatsApp.'}
                     </p>
                   )}
+
+                  {/* Live retry feedback */}
                   {waFeedback && (
-                    <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">{waFeedback}</p>
+                    <p className="text-xs font-semibold text-slate-800 bg-white/80 px-2 py-1 rounded border border-slate-200">
+                      ℹ️ {waFeedback}
+                    </p>
                   )}
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                {getDirectWhatsAppUrl() && (
-                  <button
-                    type="button"
-                    onClick={handleOpenWhatsAppWithPdf}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer whitespace-nowrap"
-                    title="Downloads PDF Bill & Opens WhatsApp chat"
-                  >
-                    <Send className="w-3 h-3 text-white" />
-                    <span>Send on WhatsApp</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleResendWhatsApp}
-                  disabled={isSendingWa}
-                  className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                  title="Trigger auto-send via API"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSendingWa ? 'animate-spin' : ''}`} />
-                  <span>{isSendingWa ? 'Sending…' : 'Retry API'}</span>
-                </button>
-              </div>
+              )}
             </div>
           )}
 

@@ -122,10 +122,11 @@ export async function sendWhatsAppInvoice(invoice) {
     const phone = sanitizeIndianPhone(rawPhone);
 
     if (!phone || phone.length !== 10) {
-      console.warn(`[WhatsApp] Invalid recipient phone "${rawPhone}" for invoice ${invoice.invoiceNumber}`);
+      const msg = 'Invalid phone number: Customer must have a valid 10-digit mobile number.';
+      console.error(`\x1b[33m[WhatsApp Skipped] Invoice #${invoice.invoiceNumber}: ${msg} (Received: "${rawPhone}")\x1b[0m`);
       return {
         success: false,
-        message: 'Invalid phone number for WhatsApp delivery.',
+        message: msg,
       };
     }
 
@@ -138,10 +139,11 @@ export async function sendWhatsAppInvoice(invoice) {
     const directUrl = `https://api.whatsapp.com/send?phone=91${phone}&text=${encodeURIComponent(message)}`;
 
     if (!accessToken && !apiUrl) {
-      console.warn('[WhatsApp] Neither WHATSAPP_API nor ACCESS_TOKEN is configured in .env');
+      const msg = 'WhatsApp API credentials not configured in backend/.env';
+      console.error(`\x1b[31m[WhatsApp Error] Invoice #${invoice.invoiceNumber}: ${msg}\x1b[0m`);
       return {
         success: false,
-        message: 'WhatsApp API credentials not configured in .env',
+        message: msg,
         whatsappUrl: directUrl,
       };
     }
@@ -377,16 +379,44 @@ export async function sendWhatsAppInvoice(invoice) {
         if (isSuccess) {
           apiSuccess = true;
           apiMessage = 'Bill PDF & message dispatched successfully!';
-          console.log(`[WhatsApp] Success via Meta Gateway:`, { docSent, templateData, textData });
+          console.log(`\n\x1b[32m============================================================\x1b[0m`);
+          console.log(`\x1b[32m✅ [WHATSAPP DISPATCH SUCCESS]\x1b[0m`);
+          console.log(`\x1b[32m🧾 Bill No: #${invoice.invoiceNumber}\x1b[0m`);
+          console.log(`\x1b[32m📱 Recipient: +91 ${phone} (${invoice.customer?.name || 'Customer'})\x1b[0m`);
+          console.log(`\x1b[32m============================================================\x1b[0m\n`);
         } else {
           const parseError = (d) => !d ? null : (typeof d.error === 'string' ? d.error : (d.error?.message || (typeof d.message === 'string' ? d.message : null)));
-          const errDetail = parseError(uploadData) || parseError(docData) || parseError(templateData) || parseError(textData);
-          apiMessage = errDetail ? `Meta API: ${errDetail}` : `Meta API error`;
-          console.warn(`[WhatsApp] Meta Gateway response:`, { docData, templateData, textData });
+          const rawErr = parseError(uploadData) || parseError(docData) || parseError(templateData) || parseError(textData);
+
+          if (!rawErr) {
+            apiMessage = 'WhatsApp gateway rejected request (Check API limits or template)';
+          } else if (/token invalidated|unauthorized|expired|invalid token/i.test(rawErr)) {
+            apiMessage = 'WhatsApp API Token Invalid or Expired: Please update ACCESS_TOKEN in backend/.env';
+          } else if (/template/i.test(rawErr)) {
+            apiMessage = `WhatsApp Template Error: ${rawErr}`;
+          } else if (/phone|recipient|number/i.test(rawErr)) {
+            apiMessage = `WhatsApp Phone Error: ${rawErr}`;
+          } else {
+            apiMessage = `WhatsApp API Error: ${rawErr}`;
+          }
+
+          // Output formatted high-visibility error block to backend terminal
+          console.error(`\n\x1b[41m\x1b[37m ❌ WHATSAPP DELIVERY ERROR \x1b[0m`);
+          console.error(`\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m`);
+          console.error(`\x1b[1m\x1b[33m🧾 Bill Number:\x1b[0m      #${invoice.invoiceNumber}`);
+          console.error(`\x1b[1m\x1b[33m📱 Recipient Phone:\x1b[0m  +91 ${phone} (${invoice.customer?.name || 'Customer'})`);
+          console.error(`\x1b[1m\x1b[31m⚠️ Error Reason:\x1b[0m     ${apiMessage}`);
+          console.error(`\x1b[1m\x1b[36m🌐 Gateway URL:\x1b[0m      ${metaEndpoint}`);
+          if (uploadData) console.error(`\x1b[35m📦 PDF Upload Detail:\x1b[0m`, JSON.stringify(uploadData));
+          if (docData) console.error(`\x1b[35m📦 Document Detail:\x1b[0m  `, JSON.stringify(docData));
+          if (templateData) console.error(`\x1b[35m📦 Template Detail:\x1b[0m  `, JSON.stringify(templateData));
+          if (textData) console.error(`\x1b[35m📦 Text Msg Detail:\x1b[0m  `, JSON.stringify(textData));
+          console.error(`\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\n`);
         }
       } catch (metaErr) {
-        console.error('[WhatsApp] Meta Gateway network error:', metaErr.message);
-        apiMessage = metaErr.message;
+        apiMessage = `WhatsApp Network Connection Error: ${metaErr.message}`;
+        console.error(`\n\x1b[41m\x1b[37m ❌ WHATSAPP NETWORK CONNECTION ERROR \x1b[0m`);
+        console.error(`\x1b[31mFailed to connect to ${apiUrl}: ${metaErr.message}\x1b[0m\n`);
       }
     } else {
       // 2. Fallback to Fast2SMS Gateway if using Fast2SMS key

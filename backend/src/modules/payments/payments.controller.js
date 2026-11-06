@@ -153,8 +153,11 @@ export const confirmPayment = async (req, res) => {
     if (updatedInvoice) {
       try {
         whatsappResult = await sendWhatsAppInvoice(updatedInvoice);
+        if (!whatsappResult?.success) {
+          console.error(`\x1b[31m[Payment Confirmed but WhatsApp Failed]\x1b[0m ${whatsappResult?.message}`);
+        }
       } catch (wsErr) {
-        console.warn('WhatsApp invoice dispatch error:', wsErr.message);
+        console.error('\x1b[31m[WhatsApp invoice dispatch exception]:\x1b[0m', wsErr.message);
       }
     }
 

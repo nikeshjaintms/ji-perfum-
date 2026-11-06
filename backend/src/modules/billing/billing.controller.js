@@ -780,8 +780,8 @@ export const sendWhatsAppBill = async (req, res) => {
     const result = await sendWhatsAppInvoice(invoice);
 
     return res.json({
-      success: true,
-      message: result.message || 'WhatsApp bill processed',
+      success: !!result.success,
+      message: result.message || (result.success ? 'WhatsApp bill sent successfully' : 'WhatsApp delivery failed'),
       data: result,
     });
   } catch (error) {
