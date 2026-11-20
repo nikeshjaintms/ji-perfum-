@@ -18,23 +18,6 @@ export default function DashboardQuickActions({
 
   const actions = [
     {
-      label: 'New POS Bill',
-      icon: ShoppingBag,
-      allowed: canBill,
-      color: 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20',
-      action: () => navigate('/billing'),
-    },
-    {
-      label: 'Add Fragrance',
-      icon: Plus,
-      allowed: canAddProduct,
-      color: 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/20',
-      action: () => {
-        if (onNavigateTab) onNavigateTab('products');
-        else navigate('/admin/products');
-      },
-    },
-    {
       label: 'Inventory Stock In',
       icon: PackageCheck,
       allowed: canManageStock,
