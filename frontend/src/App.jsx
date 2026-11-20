@@ -332,11 +332,12 @@ export default function App() {
     }
   };
 
-  const handleInvoiceCreated = (createdInvoice) => {
-    const hasUpiPending = createdInvoice.paymentMethod === 'UPI_QR' || 
-      (createdInvoice.paymentMethod === 'SPLIT' && (Number(createdInvoice.splitDetails?.upiAmount || 0) > 0 || !!createdInvoice.qrCode?.upiString));
+    const handleInvoiceCreated = (createdInvoice) => {
+    const hasOnlinePending = createdInvoice.paymentMethod === 'RAZORPAY' || 
+      createdInvoice.paymentMethod === 'UPI_QR' ||
+      (createdInvoice.paymentMethod === 'SPLIT' && Number(createdInvoice.splitDetails?.upiAmount || createdInvoice.splitDetails?.cardAmount || 0) > 0);
 
-    if (hasUpiPending) {
+    if (hasOnlinePending) {
       setActiveQrInvoice(createdInvoice);
     } else {
       setActivePrintDoc({ invoice: createdInvoice, mode: 'a4' });

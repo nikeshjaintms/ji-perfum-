@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { paymentService, billingService, getInvoicePdfUrl } from '../../services/api';
-
+import { loadRazorpayScript } from '../../utils/loadRazorpay';
 export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, onPrintReceipt }) {
   const [copied, setCopied] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -121,6 +121,83 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
       setIsSendingWa(false);
     }
   };
+
+  const handlePayWithRazorpay = async () => {
+  try {
+    // 1. Ensure Razorpay script is loaded
+    const isLoaded = await loadRazorpayScript();
+    if (!isLoaded) {
+      alert('Razorpay SDK failed to load. Are you online?');
+      return;
+    }
+
+    // 2. Request backend to create an Order
+    const orderRes = await paymentService.createRazorpayOrder(invoiceData.id);
+    if (!orderRes.success) {
+      alert(orderRes.message || 'Could not initiate Razorpay order');
+      return;
+    }
+
+    const { orderId, amount, currency, customerName, customerPhone } = orderRes.data;
+
+    // 3. Configure checkout options
+    const options = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+      amount: amount,
+      currency: currency,
+      name: 'J I PERFUME',
+      description: `Invoice #${invoiceData.invoiceNumber}`,
+      order_id: orderId,
+      prefill: {
+        name: customerName,
+        contact: customerPhone,
+      },
+      theme: {
+        color: '#D97706', // Amber brand color matching your POS
+      },
+      handler: async function (response) {
+        // 4. Verify payment on backend
+        try {
+          const verifyRes = await paymentService.verifyRazorpayPayment(invoiceData.id, {
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+
+          if (verifyRes.success) {
+            // Trigger UI success state, print modals, or confetti
+            setCurrentStatus('PAID');
+            setTxRef(response.razorpay_payment_id);
+            if (verifyRes.data?.whatsapp) {
+              setWhatsappState(verifyRes.data.whatsapp);
+            }
+            confetti({
+              particleCount: 80,
+              spread: 70,
+              origin: { y: 0.6 },
+              colors: ['#0A47E5', '#00A3FF', '#E5C07B', '#10B981'],
+            });
+            window.dispatchEvent(new CustomEvent('catalog:refresh'));
+            window.dispatchEvent(new CustomEvent('invoices:refresh'));
+          }
+        } catch (err) {
+          alert('Payment verification failed');
+        }
+      },
+      modal: {
+        ondismiss: function () {
+          console.log('Payment checkout closed');
+        },
+      },
+    };
+
+    // 5. Open Razorpay popup
+    const razorpayWindow = new window.Razorpay(options);
+    razorpayWindow.open();
+  } catch (err) {
+    console.error('Razorpay Error:', err);
+  }
+};
 
   const customerPhone = invoiceData.customer?.phone || invoiceData.customerPhone || '';
   const customerName = invoiceData.customer?.name || 'Customer';
@@ -274,7 +351,7 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
           {/* Amount Display */}
           <div>
             <div className="text-[11px] text-slate-500 font-medium">
-              {upiAmount > 0 ? 'Amount to scan' : isPartial ? 'Total and amount due' : 'Bill total'}
+              {upiAmount > 0 ? 'Amount to pay' : isPartial ? 'Total and amount due' : 'Bill total'}
             </div>
             <div className="text-3xl font-bold text-amber-600 tabular-nums mt-1">
               ₹{(upiAmount > 0 ? upiAmount : grandTotal).toFixed(2)}
@@ -284,87 +361,35 @@ export default function DynamicQrModal({ invoiceData, onClose, onPrintInvoice, o
               Inclusive of 18% GST (CGST 9% + SGST 9%)
             </div>
           </div>
+                    {/* Razorpay Online Payment Box */}
+          {!isPaid ? (
+            <div className="w-full p-4 bg-amber-50/60 border border-amber-200 rounded-xl flex flex-col items-center gap-3 text-center">
+              <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-700 flex items-center justify-center">
+                <CreditCard className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-slate-900">Instant Online Payment</h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Scan QR, Google Pay, PhonePe, Paytm, or pay with Debit/Credit Card
+                </p>
+              </div>
 
-          {/* Dynamic QR Code Box (Only if UPI amount > 0) */}
-          {upiAmount > 0 ? (
-            <div className="p-3.5 bg-white rounded-lg shadow-md border border-amber-300/40 relative group">
-              {qrDataUrl ? (
-                <img 
-                  src={qrDataUrl} 
-                  alt="Dynamic UPI QR Code" 
-                  className="w-52 h-52 object-contain mx-auto"
-                />
-              ) : (
-                <div className="w-52 h-52 flex items-center justify-center text-slate-400 tabular-nums text-xs">
-                  Generating UPI QR...
-                </div>
-              )}
-              
-              {isPaid && (
-                <div className="absolute inset-0 bg-white/95 rounded-md flex flex-col items-center justify-center text-slate-600 font-bold">
-                  <CheckCircle2 className="w-14 h-14 text-emerald-500 mb-1 drop-shadow" />
-                  <span className="text-base font-serif">Paid in full</span>
-                  <span className="text-xs tabular-nums text-slate-600 mt-0.5">Ref: {txRef}</span>
-                </div>
-              )}
-            </div>
-          ) : creditAmount > 0 ? (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg w-full text-center">
-              <BookOpen className="w-8 h-8 text-rose-500 mx-auto mb-1.5" />
-              <h4 className="text-sm font-medium text-slate-900">Part paid</h4>
-              <p className="text-xs text-slate-600 mt-1 font-light">
-                Cash: <strong className="text-slate-600 tabular-nums">₹{cashAmount.toFixed(2)}</strong> | Due: <strong className="text-rose-600 tabular-nums">₹{creditAmount.toFixed(2)}</strong>
-              </p>
+              <button
+                type="button"
+                onClick={handlePayWithRazorpay}
+                className="w-full py-3 px-4 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-semibold rounded-lg text-sm shadow transition flex items-center justify-center space-x-2 cursor-pointer"
+              >
+                <CreditCard className="w-4 h-4" />
+                <span>Open Razorpay Checkout</span>
+              </button>
             </div>
           ) : (
-            <div className="p-5 bg-white border border-slate-200 rounded-lg w-full text-center">
-              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-1.5" />
-              <h4 className="text-sm font-medium text-slate-900">Paid in full</h4>
-              <p className="text-xs text-slate-600 mt-1 font-light">
-                Cash (₹{cashAmount.toFixed(2)}) + Card (₹{cardAmount.toFixed(2)}) settled at register.
-              </p>
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl w-full text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-1.5 drop-shadow" />
+              <h4 className="text-sm font-semibold text-slate-900">Payment Completed</h4>
+              <span className="text-xs tabular-nums text-slate-600 mt-0.5 block">Ref: {txRef}</span>
             </div>
           )}
-
-          <div className="text-xs text-slate-500 flex items-center space-x-1.5 font-light">
-            <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
-            <span>Payee: <strong className="text-slate-900 font-medium">{invoiceData.store?.name || 'JI Perfume'}</strong> (ICICI UPI)</span>
-          </div>
-
-          {/* Copy UPI Link Button */}
-          {upiString && !isPaid && (
-            <button
-              onClick={handleCopyUpi}
-              className="text-xs text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-3 py-1 rounded-full border border-amber-200 flex items-center space-x-1.5 transition"
-            >
-              {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-              <span>{copied ? 'Link copied' : 'Copy UPI link'}</span>
-            </button>
-          )}
-
-          {/* Cashier Payment Confirmation controls */}
-          {!isPaid && (
-            <div className="w-full pt-2 border-t border-slate-200 flex flex-col space-y-2">
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
-                  value={utrInput}
-                  onChange={(e) => setUtrInput(e.target.value)}
-                  placeholder="Customer UPI UTR / Bank Ref (Optional)"
-                  className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-md text-xs text-slate-900 placeholder-slate-400 focus:outline-none tabular-nums"
-                />
-                <button
-                  onClick={handleConfirmPayment}
-                  disabled={isConfirming}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center space-x-1.5 whitespace-nowrap cursor-pointer"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>{isConfirming ? 'Checking…' : 'Mark as paid'}</span>
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* WhatsApp Bill Dispatch Status & Action */}
           {isPaid && (
             <div className={`w-full p-3.5 rounded-xl border text-left transition ${

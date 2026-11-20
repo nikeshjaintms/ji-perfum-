@@ -257,6 +257,14 @@ export const paymentService = {
     const res = await api.post(`/payments/${invoiceId}/confirm`, payload);
     return res.data;
   },
+  createRazorpayOrder: async (invoiceId) => {
+  const response = await api.post(`/payments/${invoiceId}/razorpay/create-order`);
+  return response.data;
+  },
+  verifyRazorpayPayment: async (invoiceId, payload) => {
+    const response = await api.post(`/payments/${invoiceId}/razorpay/verify`, payload);
+    return response.data;
+  },
 };
 
 export const userService = {

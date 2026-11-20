@@ -26,8 +26,7 @@ export function CartProvider({ children }) {
 
   const [discountType, setDiscountType] = useState('NONE'); // NONE | FIXED | PERCENTAGE
   const [discountValue, setDiscountValue] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('UPI_QR'); // UPI_QR | CASH | CARD | SPLIT | CREDIT
-
+  const [paymentMethod, setPaymentMethod] = useState('RAZORPAY'); // RAZORPAY | CASH | SPLIT | CREDIT
   const [splitCash, setSplitCash] = useState('');
   const [splitUpi, setSplitUpi] = useState('');
   const [splitCard, setSplitCard] = useState('');
@@ -200,26 +199,11 @@ export function CartProvider({ children }) {
     (preset) => {
       const half = Math.floor(grandTotal / 2);
       const remainder = Number((grandTotal - half).toFixed(2));
-      if (preset === 'CASH_CREDIT') {
-        setSplitCash(String(half));
-        setSplitCredit(String(remainder));
-        setSplitUpi('');
-        setSplitCard('');
-      } else if (preset === 'CASH_UPI') {
+      if (preset === 'CASH_UPI' || preset === 'CASH_CREDIT') {
         setSplitCash(String(half));
         setSplitUpi(String(remainder));
         setSplitCard('');
         setSplitCredit('');
-      } else if (preset === 'CASH_CARD') {
-        setSplitCash(String(half));
-        setSplitCard(String(remainder));
-        setSplitUpi('');
-        setSplitCredit('');
-      } else if (preset === 'FULL_CREDIT') {
-        setSplitCredit(String(grandTotal));
-        setSplitCash('');
-        setSplitUpi('');
-        setSplitCard('');
       } else if (preset === 'CLEAR') {
         setSplitCash('');
         setSplitUpi('');

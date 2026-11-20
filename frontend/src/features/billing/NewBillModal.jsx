@@ -7,7 +7,6 @@ import {
   Banknote,
   CreditCard,
   Layers,
-  BookOpen,
   RotateCcw,
   RefreshCw,
   AlertCircle,
@@ -145,32 +144,25 @@ export default function NewBillModal({
   const checkoutLabel = (() => {
     if (isSubmitting) return 'Saving bill…';
     if (!isNameValid || !isPhoneValid) return 'Enter name & phone to checkout';
-    if (paymentMethod === 'UPI_QR') return `Show QR · ${inr(grandTotal)}`;
-    if (paymentMethod === 'CREDIT') return `Save on credit · ${inr(grandTotal)} due`;
+    if (paymentMethod === 'RAZORPAY' || paymentMethod === 'UPI_QR') return `Pay with Razorpay · ${inr(grandTotal)}`;
     if (paymentMethod === 'SPLIT') {
       if (Math.abs(splitRemaining) > 0.05 || splitTotalAllocated <= 0) {
         return splitRemaining > 0 ? `${inr(splitRemaining)} still to assign` : `${inr(Math.abs(splitRemaining))} over the total`;
       }
-      return numSplitCredit > 0
-        ? `Save bill · ${inr(splitPaidNow)} paid, ${inr(numSplitCredit)} due`
-        : `Save bill · ${inr(grandTotal)}`;
+      return `Save bill · ${inr(grandTotal)}`;
     }
     return `Save bill · ${inr(grandTotal)}`;
   })();
 
   const paymentOptions = [
-    { id: 'UPI_QR', label: 'UPI QR', icon: QrCode },
+    { id: 'RAZORPAY', label: 'Razorpay (UPI / Card)', icon: CreditCard },
     { id: 'CASH', label: 'Cash', icon: Banknote },
-    { id: 'CARD', label: 'Card', icon: CreditCard },
     { id: 'SPLIT', label: 'Split', icon: Layers },
-    { id: 'CREDIT', label: 'On credit', icon: BookOpen },
   ];
 
   const splitFields = [
     { key: 'cash', label: 'Cash', value: splitCash, set: setSplitCash },
-    { key: 'upi', label: 'UPI QR', value: splitUpi, set: setSplitUpi },
-    { key: 'card', label: 'Card', value: splitCard, set: setSplitCard },
-    { key: 'credit', label: 'On credit', value: splitCredit, set: setSplitCredit },
+    { key: 'upi', label: 'Razorpay / Online', value: splitUpi, set: setSplitUpi },
   ];
 
   const fieldClass =
@@ -462,8 +454,8 @@ export default function NewBillModal({
                     aria-checked={paymentMethod === opt.id}
                     onClick={() => {
                       setPaymentMethod(opt.id);
-                      if (opt.id === 'SPLIT' && !splitCash && !splitCredit && !splitUpi && !splitCard) {
-                        handlePresetSplit('CASH_CREDIT');
+                      if (opt.id === 'SPLIT' && !splitCash && !splitUpi) {
+                        handlePresetSplit('CASH_UPI');
                       }
                     }}
                     className={`px-2.5 sm:px-3 py-1.5 rounded-md border text-xs sm:text-sm transition-colors cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
@@ -485,9 +477,7 @@ export default function NewBillModal({
             <div className="mt-4 space-y-3 text-xs sm:text-sm">
               <div className="flex flex-wrap items-center gap-x-2.5 sm:gap-x-3 gap-y-1 text-slate-500">
                 <span className="whitespace-nowrap">Quick split:</span>
-                <button type="button" onClick={() => handlePresetSplit('CASH_CREDIT')} className="underline underline-offset-2 hover:text-slate-900 cursor-pointer whitespace-nowrap">cash + credit</button>
-                <button type="button" onClick={() => handlePresetSplit('CASH_UPI')} className="underline underline-offset-2 hover:text-slate-900 cursor-pointer whitespace-nowrap">cash + UPI</button>
-                <button type="button" onClick={() => handlePresetSplit('CASH_CARD')} className="underline underline-offset-2 hover:text-slate-900 cursor-pointer whitespace-nowrap">cash + card</button>
+                <button type="button" onClick={() => handlePresetSplit('CASH_UPI')} className="underline underline-offset-2 hover:text-slate-900 cursor-pointer whitespace-nowrap">cash + online</button>
                 <button type="button" onClick={() => handlePresetSplit('CLEAR')} className="ml-auto inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900 cursor-pointer whitespace-nowrap"><RotateCcw className="w-3 h-3 text-slate-400" /><span>reset</span></button>
               </div>
 
@@ -522,12 +512,6 @@ export default function NewBillModal({
                   : `${inr(Math.abs(splitRemaining))} more than the bill total.`}
               </p>
             </div>
-          )}
-
-          {(paymentMethod === 'CREDIT' || (paymentMethod === 'SPLIT' && numSplitCredit > 0)) && (
-            <p className="mt-3 text-xs sm:text-sm text-slate-600 border-l-2 border-rose-300 pl-3">
-              {inr(paymentMethod === 'CREDIT' ? grandTotal : numSplitCredit)} will be added to this customer’s account as due. Add their name or phone above so it can be found later.
-            </p>
           )}
 
           {errorMsg && (

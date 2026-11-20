@@ -9,18 +9,23 @@ import {
 
 export const createInvoice = async (req, res) => {
   try {
-    const {
+    let {
       customerId,
       customerData, // { name, phone, email, city, address }
       items, // [{ productId, quantity }]
       discountType = 'NONE',
       discountValue = 0,
-      paymentMethod = 'UPI_QR',
+      paymentMethod = 'RAZORPAY',
       splitDetails, // { cashAmount, upiAmount, cardAmount }
       isDirectPaid = false,
       notes,
       storeId, // Multi-City Store ID
     } = req.body;
+
+    // Normalize paymentMethod for DB enum (map RAZORPAY to UPI_QR so Prisma enum is satisfied without DB migration)
+    if (paymentMethod === 'RAZORPAY') {
+      paymentMethod = 'UPI_QR';
+    }
 
     if (!items || !items.length) {
       return res.status(400).json({ success: false, message: 'Invoice must contain at least one item.' });
@@ -298,18 +303,6 @@ export const createInvoice = async (req, res) => {
 
         if ((paymentMethod === 'UPI_QR' || (paymentMethod === 'SPLIT' && upiAmount > 0)) && effectiveUpiAmount > 0) {
           upiString = `upi://pay?pa=${storeUpi}&pn=${encodeURIComponent(storeName)}&am=${effectiveUpiAmount}&cu=INR&tn=${encodeURIComponent('Bill ' + invoiceNumber + (paymentMethod === 'SPLIT' ? ' Bal' : ''))}`;
-          try {
-            qrDataUrl = await QRCode.toDataURL(upiString, {
-              width: 320,
-              margin: 2,
-              color: {
-                dark: '#0A47E5',
-                light: '#FFFFFF',
-              },
-            });
-          } catch (qrErr) {
-            console.warn('QR code generation warning:', qrErr);
-          }
         }
 
         result = await prisma.$transaction(async (tx) => {
