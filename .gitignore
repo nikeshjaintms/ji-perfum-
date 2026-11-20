@@ -11,6 +11,7 @@ node_modules/
 .env.*.local
 invoices/
 backend/invoices
+backend/reports
 backend/.env
 backend/.env.local
 backend/.env.development
@@ -19,7 +20,7 @@ frontend/.env
 frontend/.env.local
 frontend/.env.development
 frontend/.env.production
-
+tests/
 # Allow committed template examples for the team
 !.env.example
 !backend/.env.example
