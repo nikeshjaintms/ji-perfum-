@@ -11,20 +11,37 @@ import productsRoutes from './modules/products/products.routes.js';
 import billingRoutes from './modules/billing/billing.routes.js';
 import paymentsRoutes from './modules/payments/payments.routes.js';
 import storesRoutes from './modules/stores/stores.routes.js';
+import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
 import { prisma } from './config/prisma.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const invoicesDir = path.resolve(__dirname, '../invoices');
+const reportsDir = path.resolve(__dirname, '../reports');
 
 const app = express();
+app.disable('x-powered-by');
 
-// Serve local invoice PDFs statically (e.g. /invoices/JJ-Perfume-Invoice-JJ-2026-0024.pdf)
-app.use('/invoices', express.static(invoicesDir));
+// Serve local invoice PDFs & inventory reports statically with directory index listing disabled
+app.use('/invoices', express.static(invoicesDir, { dotfiles: 'ignore', index: false }));
+app.use('/reports', express.static(reportsDir, { dotfiles: 'ignore', index: false }));
 
-// Middleware
+// Security & CORS configuration
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+].filter(Boolean);
+
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
+      return callback(null, true);
+    }
+    return callback(new Error('Blocked by CORS policy'));
+  },
   credentials: true,
 }));
 app.use(cookieParser());
@@ -61,6 +78,7 @@ app.use('/api/v1/products', productsRoutes);
 app.use('/api/v1/billing', billingRoutes);
 app.use('/api/v1/payments', paymentsRoutes);
 app.use('/api/v1/stores', storesRoutes);
+app.use('/api/v1/dashboard', dashboardRoutes);
 
 // Centralized 404 handler
 app.use((req, res) => {

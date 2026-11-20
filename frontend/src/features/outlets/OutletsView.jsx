@@ -13,12 +13,16 @@ import {
   AlertCircle,
   Globe2,
   Check,
-  Search
+  Search,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { storeService } from '../../services/api';
 import AddOutletModal from '../../components/AddOutletModal';
+import { hasPermission } from '../../utils/permissions';
 
-export default function OutletsView({ onStoreCreated = null }) {
+export default function OutletsView({ onStoreCreated = null, currentUser = null }) {
+  const canManageStores = hasPermission(currentUser, 'stores:manage');
   const [activeSubTab, setActiveSubTab] = useState('stores'); // 'stores' | 'cities'
 
   // Stores State
@@ -37,7 +41,23 @@ export default function OutletsView({ onStoreCreated = null }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalInitialTab, setModalInitialTab] = useState('store'); // 'store' | 'city'
 
+  // Delete Store State
+  const [isDeleteStoreModalOpen, setIsDeleteStoreModalOpen] = useState(false);
+  const [storeToDelete, setStoreToDelete] = useState(null);
+  const [deletingStore, setDeletingStore] = useState(false);
+  const [deleteStoreError, setDeleteStoreError] = useState('');
+
+  // Delete City State
+  const [isDeleteCityModalOpen, setIsDeleteCityModalOpen] = useState(false);
+  const [cityToDelete, setCityToDelete] = useState(null);
+  const [deletingCity, setDeletingCity] = useState(false);
+  const [deleteCityError, setDeleteCityError] = useState('');
+
   const fetchStores = useCallback(async () => {
+    if (currentUser && !hasPermission(currentUser, 'stores:view')) {
+      setLoadingStores(false);
+      return;
+    }
     try {
       setLoadingStores(true);
       const res = await storeService.getStores();
@@ -49,9 +69,13 @@ export default function OutletsView({ onStoreCreated = null }) {
     } finally {
       setLoadingStores(false);
     }
-  }, []);
+  }, [currentUser]);
 
   const fetchCities = useCallback(async () => {
+    if (currentUser && !hasPermission(currentUser, 'stores:view')) {
+      setLoadingCities(false);
+      return;
+    }
     try {
       setLoadingCities(true);
       const res = await storeService.getCities();
@@ -63,7 +87,7 @@ export default function OutletsView({ onStoreCreated = null }) {
     } finally {
       setLoadingCities(false);
     }
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     fetchStores();
@@ -91,6 +115,55 @@ export default function OutletsView({ onStoreCreated = null }) {
   const handleModalCityCreated = () => {
     fetchCities();
     fetchStores();
+  };
+
+  const handleOpenDeleteStoreModal = (store) => {
+    setStoreToDelete(store);
+    setDeleteStoreError('');
+    setIsDeleteStoreModalOpen(true);
+  };
+
+  const handleConfirmDeleteStore = async () => {
+    if (!storeToDelete) return;
+    try {
+      setDeletingStore(true);
+      setDeleteStoreError('');
+      await storeService.deleteStore(storeToDelete.id);
+      setIsDeleteStoreModalOpen(false);
+      setStoreToDelete(null);
+      fetchStores();
+      fetchCities();
+      if (onStoreCreated) {
+        onStoreCreated();
+      }
+    } catch (err) {
+      setDeleteStoreError(err.response?.data?.message || 'Failed to delete store outlet');
+    } finally {
+      setDeletingStore(false);
+    }
+  };
+
+  const handleOpenDeleteCityModal = (city) => {
+    setCityToDelete(city);
+    setDeleteCityError('');
+    setIsDeleteCityModalOpen(true);
+  };
+
+  const handleConfirmDeleteCity = async () => {
+    if (!cityToDelete) return;
+    try {
+      setDeletingCity(true);
+      setDeleteCityError('');
+      await storeService.deleteCity(cityToDelete.id);
+      setIsDeleteCityModalOpen(false);
+      setCityToDelete(null);
+      fetchCities();
+      fetchStores();
+    } catch (err) {
+      setDeleteCityError(err.response?.data?.message || 'Failed to delete city');
+    } finally {
+      setDeletingCity(false);
+    }
   };
 
   // Filtered Stores
@@ -275,8 +348,32 @@ export default function OutletsView({ onStoreCreated = null }) {
             </span>
           ),
       },
+      {
+        key: 'actions',
+        header: 'Actions',
+        sortable: false,
+        align: 'right',
+        className: 'whitespace-nowrap',
+        headerClassName: 'whitespace-nowrap',
+        render: (_, store) => (
+          <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+            {canManageStores ? (
+              <button
+                type="button"
+                onClick={() => handleOpenDeleteStoreModal(store)}
+                className="p-1.5 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition cursor-pointer"
+                title={`Delete ${store.name}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <span className="text-[11px] text-slate-400 italic">View Only</span>
+            )}
+          </div>
+        ),
+      },
     ],
-    []
+    [canManageStores]
   );
 
   // City Columns
@@ -363,8 +460,32 @@ export default function OutletsView({ onStoreCreated = null }) {
               })
             : '—',
       },
+      {
+        key: 'actions',
+        header: 'Actions',
+        sortable: false,
+        align: 'right',
+        className: 'whitespace-nowrap',
+        headerClassName: 'whitespace-nowrap',
+        render: (_, city) => (
+          <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+            {canManageStores ? (
+              <button
+                type="button"
+                onClick={() => handleOpenDeleteCityModal(city)}
+                className="p-1.5 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition cursor-pointer"
+                title={`Delete ${city.name}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <span className="text-[11px] text-slate-400 italic">View Only</span>
+            )}
+          </div>
+        ),
+      },
     ],
-    []
+    [canManageStores]
   );
 
   return (
@@ -386,23 +507,25 @@ export default function OutletsView({ onStoreCreated = null }) {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <button
-            onClick={handleOpenAddCity}
-            className="flex-1 sm:flex-initial px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-slate-300 rounded-md text-xs font-semibold transition shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer whitespace-nowrap"
-          >
-            <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-            <span>Add City</span>
-          </button>
+        {canManageStores && (
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+            <button
+              onClick={handleOpenAddCity}
+              className="flex-1 sm:flex-initial px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-slate-300 rounded-md text-xs font-semibold transition shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer whitespace-nowrap"
+            >
+              <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>Add City</span>
+            </button>
 
-          <button
-            onClick={handleOpenAddOutlet}
-            className="flex-1 sm:flex-initial px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center justify-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5 shrink-0" />
-            <span>Add Outlet</span>
-          </button>
-        </div>
+            <button
+              onClick={handleOpenAddOutlet}
+              className="flex-1 sm:flex-initial px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center justify-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5 shrink-0" />
+              <span>Add Outlet</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Sub-Tab Navigation Bar */}
@@ -515,6 +638,124 @@ export default function OutletsView({ onStoreCreated = null }) {
           onStoreCreated={handleModalStoreCreated}
           onCityCreated={handleModalCityCreated}
         />
+      )}
+
+      {/* Delete Store Confirmation Modal */}
+      {isDeleteStoreModalOpen && storeToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/50 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-900 my-auto">
+            <div className="flex items-center space-x-3 text-rose-600 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-semibold text-slate-900">
+                  Delete Boutique Outlet
+                </h3>
+                <p className="text-xs text-slate-500">Remove outlet location</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+              Are you sure you want to delete <span className="font-semibold text-slate-900">{storeToDelete.name}</span> (<span className="text-slate-700 font-mono">{storeToDelete.code}</span>) in {storeToDelete.city?.name || 'Main Hub'}?
+            </p>
+
+            <p className="text-[11px] text-slate-500 mt-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200 leading-normal">
+              <strong>Note:</strong> Outlets with assigned staff cannot be removed until staff are reassigned. Outlets with past sales invoices will be archived to preserve tax invoices.
+            </p>
+
+            {deleteStoreError && (
+              <div className="mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-md flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{deleteStoreError}</span>
+              </div>
+            )}
+
+            <div className="mt-6 flex items-center justify-end space-x-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteStoreModalOpen(false);
+                  setStoreToDelete(null);
+                  setDeleteStoreError('');
+                }}
+                disabled={deletingStore}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteStore}
+                disabled={deletingStore}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold transition cursor-pointer flex items-center space-x-1.5 shadow-sm disabled:opacity-60"
+              >
+                {deletingStore && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>{deletingStore ? 'Deleting...' : 'Confirm Delete'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete City Confirmation Modal */}
+      {isDeleteCityModalOpen && cityToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/50 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl text-slate-900 my-auto">
+            <div className="flex items-center space-x-3 text-rose-600 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-semibold text-slate-900">
+                  Delete City
+                </h3>
+                <p className="text-xs text-slate-500">Remove statutory city hub</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+              Are you sure you want to delete <span className="font-semibold text-slate-900">{cityToDelete.name}</span> ({cityToDelete.state})?
+            </p>
+
+            {cityToDelete.stores && cityToDelete.stores.length > 0 && (
+              <p className="text-[11px] text-amber-700 mt-2 bg-amber-50 p-2.5 rounded-lg border border-amber-200 leading-normal">
+                <strong>Warning:</strong> This city currently has <strong>{cityToDelete.stores.length}</strong> registered outlet(s). You must delete or reassign all outlets in {cityToDelete.name} before this city can be deleted.
+              </p>
+            )}
+
+            {deleteCityError && (
+              <div className="mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-md flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{deleteCityError}</span>
+              </div>
+            )}
+
+            <div className="mt-6 flex items-center justify-end space-x-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteCityModalOpen(false);
+                  setCityToDelete(null);
+                  setDeleteCityError('');
+                }}
+                disabled={deletingCity}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteCity}
+                disabled={deletingCity}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold transition cursor-pointer flex items-center space-x-1.5 shadow-sm disabled:opacity-60"
+              >
+                {deletingCity && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>{deletingCity ? 'Deleting...' : 'Confirm Delete'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

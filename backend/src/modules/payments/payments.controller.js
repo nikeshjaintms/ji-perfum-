@@ -8,21 +8,21 @@ export const getInvoicePaymentDetails = async (req, res) => {
 
     const invoice = await prisma.invoice.findUnique({
       where: { id: invoiceId },
-      include: { payments: true },
+      include: { payments: true, store: true },
     });
 
     if (!invoice) {
       return res.status(404).json({ success: false, message: 'Invoice not found' });
     }
 
-    const upiId = process.env.STORE_UPI_ID || 'jjperfumes@icici';
-    const storeName = process.env.STORE_NAME || 'JJ PERFUME';
+    const upiId = invoice.store?.upiId || process.env.STORE_UPI_ID || 'jjperfumes@icici';
+    const storeName = invoice.store?.name || process.env.STORE_NAME || 'J I PERFUME';
     
     // Find pending payment amount (for split payments)
     const pendingPayment = invoice.payments.find((p) => p.status === 'PENDING') || invoice.payments[0];
     const amountToPay = pendingPayment ? Number(pendingPayment.amount) : Number(invoice.grandTotal);
 
-    const upiString = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(storeName)}&am=${amountToPay}&cu=INR&tn=${encodeURIComponent('JJ Perfume Inv ' + invoice.invoiceNumber + (invoice.paymentMethod === 'SPLIT' ? ' Bal' : ''))}`;
+    const upiString = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(storeName)}&am=${amountToPay}&cu=INR&tn=${encodeURIComponent('J I Perfume Inv ' + invoice.invoiceNumber + (invoice.paymentMethod === 'SPLIT' ? ' Bal' : ''))}`;
 
     const qrDataUrl = await QRCode.toDataURL(upiString, {
       width: 320,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import DataTable from '../../components/DataTable';
+import CategoryMultiSelectDropdown from '../../components/CategoryMultiSelectDropdown';
 import { 
   LayoutGrid, 
   List, 
@@ -12,17 +13,38 @@ import {
   Plus, 
   Trash2, 
   CheckCircle2,
-  Store
+  Store,
+  FolderTree,
+  ChevronDown
 } from 'lucide-react';
 import { productService } from '../../services/api';
 import { useCart } from '../../context/CartContext';
+import { useSearchParams } from 'react-router-dom';
 
 export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlCategory = searchParams.get('category');
+
   // Catalog & Server-Side Pagination State
   const [products, setProducts] = useState([]);
   const [totalProducts, setTotalProducts] = useState(0);
   const [categories, setCategories] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState(() => {
+    if (urlCategory && urlCategory !== 'ALL') {
+      return urlCategory.includes(',') ? urlCategory.split(',').filter(Boolean) : [urlCategory];
+    }
+    return [];
+  });
+
+  // Keep selectedCategoryIds in sync if URL search param changes
+  useEffect(() => {
+    const cat = searchParams.get('category');
+    if (cat && cat !== 'ALL') {
+      setSelectedCategoryIds(cat.includes(',') ? cat.split(',').filter(Boolean) : [cat]);
+    } else {
+      setSelectedCategoryIds([]);
+    }
+  }, [searchParams]);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -108,8 +130,8 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
       if (inStockOnly) {
         params.inStockOnly = 'true';
       }
-      if (selectedCategory && selectedCategory !== 'ALL') {
-        params.categoryId = selectedCategory;
+      if (selectedCategoryIds.length > 0) {
+        params.categoryId = selectedCategoryIds.join(',');
       }
       if (debouncedSearch && debouncedSearch.trim()) {
         params.search = debouncedSearch.trim();
@@ -136,7 +158,7 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
     } finally {
       setLoading(false);
     }
-  }, [selectedStore?.id, inStockOnly, selectedCategory, debouncedSearch, page, pageSize, sortConfig]);
+  }, [selectedStore?.id, inStockOnly, selectedCategoryIds, debouncedSearch, page, pageSize, sortConfig]);
 
   useEffect(() => {
     fetchCatalog();
@@ -156,9 +178,16 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
     fetchCategories();
   };
 
-  const handleCategorySelect = (catId) => {
-    setSelectedCategory(catId);
+  const handleCategoryChange = (newIds) => {
+    setSelectedCategoryIds(newIds);
     setPage(1);
+    const newParams = new URLSearchParams(searchParams);
+    if (newIds.length > 0) {
+      newParams.set('category', newIds.join(','));
+    } else {
+      newParams.delete('category');
+    }
+    setSearchParams(newParams, { replace: true });
   };
 
   const handlePageSizeChange = (newSize) => {
@@ -170,6 +199,9 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
     setSortConfig(newSort);
     setPage(1);
   };
+
+  const storeDisplayName = selectedStore?.name || selectedStore?.city?.name || 'this counter';
+  const cityName = storeDisplayName;
 
   const handleAddToCart = (product) => {
     const storeStock = product.currentStoreStock !== undefined ? product.currentStoreStock : product.stockQuantity;
@@ -238,7 +270,6 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
     }
   };
 
-  const cityName = selectedStore?.city?.name || 'this counter';
   const fieldClass =
     'w-full px-2.5 py-1.5 bg-white border border-slate-300 focus:border-amber-500 rounded-md text-sm text-slate-900 placeholder-slate-400 focus:outline-none';
 
@@ -502,34 +533,19 @@ export default function PosBillingView({ selectedStore, onInvoiceCreated }) {
             </p>
           )}
 
-          {/* Categories Filter Pills (Clean Wrap, Zero Horizontal Scroll) */}
-          <div className="mt-4 sm:mt-5 flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mr-1 hidden sm:inline">
-              Category:
-            </span>
-            {[{ id: 'ALL', name: 'All' }, ...categories].map((cat) => {
-              const isSelected = selectedCategory === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => handleCategorySelect(cat.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-                    isSelected
-                      ? 'bg-amber-500 text-white font-semibold shadow-xs'
-                      : 'bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 shadow-2xs'
-                  }`}
-                >
-                  <span className="whitespace-nowrap">{cat.name}</span>
-                </button>
-              );
-            })}
-          </div>
+          {/* Catalog Toolbar: Category Filter, View Mode, In-Stock Filter & Search */}
+          <div className="mt-4 mb-3 flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
+            {/* Left Controls: Category Dropdown, View Mode & In-Stock Filter */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Category Multi-Select Filter Dropdown */}
+              <CategoryMultiSelectDropdown
+                categories={categories}
+                selectedCategoryIds={selectedCategoryIds}
+                onChange={handleCategoryChange}
+                placeholder="All Categories"
+              />
 
-          {/* Catalog Toolbar: View Toggle & Search */}
-          <div className="my-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sm:gap-3">
-            {/* View Mode Switcher & In-Stock Filter */}
-            <div className="flex items-center gap-2">
+              {/* View Mode Switcher */}
               <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0">
                 <button
                   type="button"

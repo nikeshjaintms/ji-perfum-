@@ -53,6 +53,23 @@ export const authenticate = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'User not found or inactive.' });
     }
 
+    // Load active granular permissions assigned to this user's role from role_permissions
+    let permissions = [];
+    try {
+      const roleRows = await prisma.$queryRawUnsafe(
+        `SELECT permissions FROM role_permissions WHERE role_id = ?;`,
+        user.role
+      );
+      if (roleRows && roleRows.length > 0) {
+        const raw = roleRows[0].permissions;
+        permissions = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      }
+    } catch (err) {
+      console.error('Error fetching role permissions for user:', err);
+      permissions = [];
+    }
+
+    user.permissions = Array.isArray(permissions) ? permissions : [];
     req.user = user;
     next();
   } catch (error) {
@@ -60,17 +77,36 @@ export const authenticate = async (req, res, next) => {
   }
 };
 
-export const authorize = (allowedRoles = []) => {
+export const authorize = (requirements = []) => {
+  const reqList = Array.isArray(requirements) ? requirements : [requirements];
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
-    if (allowedRoles.length && !allowedRoles.includes(req.user.role)) {
+
+    // Super Admin has unrestricted authority over all modules
+    if (req.user.role === 'SUPER_ADMIN') {
+      return next();
+    }
+
+    const userPerms = req.user.permissions || [];
+    const userRole = req.user.role;
+
+    // Check if user has ANY of the required permissions OR matching role
+    const hasAccess = reqList.some((item) => {
+      if (item.includes(':')) {
+        return userPerms.includes(item);
+      }
+      return item === userRole;
+    });
+
+    if (!hasAccess) {
       return res.status(403).json({
         success: false,
-        message: `Forbidden. Role ${req.user.role} does not have required permissions.`,
+        message: `Forbidden: Your account does not have permission (${reqList.join(' or ')}) to perform this action.`,
       });
     }
+
     next();
   };
 };

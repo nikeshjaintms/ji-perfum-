@@ -19,8 +19,10 @@ import {
   MapPin
 } from 'lucide-react';
 import { userService, storeService } from '../../services/api';
+import { hasPermission } from '../../utils/permissions';
 
-export default function UsersView() {
+export default function UsersView({ currentUser = null }) {
+  const canManageUsers = hasPermission(currentUser, 'users:manage');
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [totalUsers, setTotalUsers] = useState(0);
@@ -75,6 +77,10 @@ export default function UsersView() {
   const [deleteError, setDeleteError] = useState('');
 
   const fetchUsers = useCallback(async () => {
+    if (currentUser && !hasPermission(currentUser, 'users:view')) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const params = {
@@ -107,7 +113,7 @@ export default function UsersView() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, selectedOutletFilter, sortConfig]);
+  }, [page, pageSize, search, selectedOutletFilter, sortConfig, currentUser]);
 
   useEffect(() => {
     fetchUsers();
@@ -375,26 +381,32 @@ export default function UsersView() {
       headerClassName: 'whitespace-nowrap',
       render: (_, user) => (
         <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            onClick={() => handleOpenEditModal(user)}
-            className="p-1.5 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
-            title={`Edit ${user.name}`}
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleOpenDeleteModal(user)}
-            className="p-1.5 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition cursor-pointer"
-            title={`Delete ${user.name}`}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {canManageUsers ? (
+            <>
+              <button
+                type="button"
+                onClick={() => handleOpenEditModal(user)}
+                className="p-1.5 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
+                title={`Edit ${user.name}`}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenDeleteModal(user)}
+                className="p-1.5 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition cursor-pointer"
+                title={`Delete ${user.name}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </>
+          ) : (
+            <span className="text-[11px] text-slate-400 italic">View Only</span>
+          )}
         </div>
       ),
     },
-  ], []);
+  ], [canManageUsers]);
 
   return (
     <div className="max-w-[1700px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
@@ -406,14 +418,16 @@ export default function UsersView() {
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">Who can sign in, and what they are allowed to do.</p>
         </div>
     
-        <button
-          id="add-user-btn"
-          onClick={handleOpenAddModal}
-          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
-        >
-          <UserPlus className="w-3.5 h-3.5 shrink-0" />
-          <span className="whitespace-nowrap">Add User</span>
-        </button>
+        {canManageUsers && (
+          <button
+            id="add-user-btn"
+            onClick={handleOpenAddModal}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-xs font-semibold transition shadow-md flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
+          >
+            <UserPlus className="w-3.5 h-3.5 shrink-0" />
+            <span className="whitespace-nowrap">Add User</span>
+          </button>
+        )}
       </div>
 
       <DataTable

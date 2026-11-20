@@ -4,6 +4,7 @@ import {
   getProductByBarcodeOrSku,
   createProduct,
   updateProduct,
+  deleteProduct,
   adjustStock,
   getCategories,
   createCategory,
@@ -20,13 +21,14 @@ router.get('/lookup/:code', authenticate, getProductByBarcodeOrSku);
 router.get('/categories', authenticate, getCategories);
 
 // Category Master Management
-router.post('/categories', authenticate, authorize(['SUPER_ADMIN', 'STORE_MANAGER']), createCategory);
-router.put('/categories/:id', authenticate, authorize(['SUPER_ADMIN', 'STORE_MANAGER']), updateCategory);
-router.delete('/categories/:id', authenticate, authorize(['SUPER_ADMIN', 'STORE_MANAGER']), deleteCategory);
+router.post('/categories', authenticate, authorize(['categories:manage']), createCategory);
+router.put('/categories/:id', authenticate, authorize(['categories:manage']), updateCategory);
+router.delete('/categories/:id', authenticate, authorize(['categories:manage']), deleteCategory);
 
-// Admin / Store Manager modifications
-router.post('/', authenticate, authorize(['SUPER_ADMIN', 'STORE_MANAGER']), createProduct);
-router.put('/:id', authenticate, authorize(['SUPER_ADMIN', 'STORE_MANAGER']), updateProduct);
-router.post('/:id/adjust-stock', authenticate, authorize(['SUPER_ADMIN', 'STORE_MANAGER']), adjustStock);
+// Fragrance Products Management
+router.post('/', authenticate, authorize(['products:create']), createProduct);
+router.put('/:id', authenticate, authorize(['products:edit']), updateProduct);
+router.delete('/:id', authenticate, authorize(['products:delete']), deleteProduct);
+router.post('/:id/adjust-stock', authenticate, authorize(['products:stock']), adjustStock);
 
 export default router;

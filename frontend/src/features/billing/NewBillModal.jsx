@@ -18,14 +18,17 @@ import {
   Check
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
+import { hasPermission } from '../../utils/permissions';
 
 export default function NewBillModal({
   isOpen,
   onClose,
   selectedStore,
+  currentUser = null,
   onInvoiceCreated,
   onNavigateToBilling,
 }) {
+  const canApplyDiscount = hasPermission(currentUser, 'billing:discount');
   const {
     cart,
     cartCount,
@@ -389,43 +392,47 @@ export default function NewBillModal({
             </ul>
           )}
 
-          <div className="slip-rule my-4" />
+          {canApplyDiscount && (
+            <>
+              <div className="slip-rule my-4" />
 
-          {/* Discount */}
-          <fieldset>
-            <legend className="sr-only">Discount</legend>
-            <div className="flex items-center justify-between text-xs sm:text-sm">
-              <span className="text-slate-700">Discount</span>
-              <div className="flex gap-2 sm:gap-3 whitespace-nowrap">
-                {[
-                  { id: 'NONE', label: 'None' },
-                  { id: 'FIXED', label: '₹ off' },
-                  { id: 'PERCENTAGE', label: '% off' },
-                ].map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setDiscountType(opt.id)}
-                    aria-pressed={discountType === opt.id}
-                    className={`cursor-pointer whitespace-nowrap ${discountType === opt.id ? 'text-amber-700 font-semibold underline underline-offset-4' : 'text-slate-500 hover:text-slate-900'}`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {discountType !== 'NONE' && (
-              <input
-                type="number"
-                min="0"
-                value={discountValue}
-                onChange={(e) => setDiscountValue(e.target.value)}
-                aria-label={discountType === 'FIXED' ? 'Discount in rupees' : 'Discount in percent'}
-                placeholder={discountType === 'FIXED' ? 'Amount in ₹' : 'Percent'}
-                className={`${fieldClass} mt-2`}
-              />
-            )}
-          </fieldset>
+              {/* Discount */}
+              <fieldset>
+                <legend className="sr-only">Discount</legend>
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <span className="text-slate-700">Discount</span>
+                  <div className="flex gap-2 sm:gap-3 whitespace-nowrap">
+                    {[
+                      { id: 'NONE', label: 'None' },
+                      { id: 'FIXED', label: '₹ off' },
+                      { id: 'PERCENTAGE', label: '% off' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setDiscountType(opt.id)}
+                        aria-pressed={discountType === opt.id}
+                        className={`cursor-pointer whitespace-nowrap ${discountType === opt.id ? 'text-amber-700 font-semibold underline underline-offset-4' : 'text-slate-500 hover:text-slate-900'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {discountType !== 'NONE' && (
+                  <input
+                    type="number"
+                    min="0"
+                    value={discountValue}
+                    onChange={(e) => setDiscountValue(e.target.value)}
+                    aria-label={discountType === 'FIXED' ? 'Discount in rupees' : 'Discount in percent'}
+                    placeholder={discountType === 'FIXED' ? 'Amount in ₹' : 'Percent'}
+                    className={`${fieldClass} mt-2`}
+                  />
+                )}
+              </fieldset>
+            </>
+          )}
 
           <dl className="mt-4 space-y-1 text-xs sm:text-sm text-slate-600">
             <div className="flex justify-between"><dt>Subtotal</dt><dd className="text-slate-900 tabular-nums whitespace-nowrap">{inr(subtotal)}</dd></div>

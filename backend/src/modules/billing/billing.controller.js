@@ -2,6 +2,10 @@ import QRCode from 'qrcode';
 import { prisma } from '../../config/prisma.js';
 import { sendWhatsAppInvoice, sanitizeIndianPhone } from '../../services/whatsapp.service.js';
 import { generateInvoicePdfBuffer, saveInvoicePdfLocally } from '../../services/pdf.service.js';
+import {
+  evaluateStockTrackingInTx,
+  dispatchLowStockWhatsAppNotification,
+} from '../../services/lowStock.service.js';
 
 export const createInvoice = async (req, res) => {
   try {
@@ -45,7 +49,11 @@ export const createInvoice = async (req, res) => {
     }
 
     // 1. Resolve Store & City
-    let resolvedStoreId = storeId || req.user.assignedStoreId;
+    // For non-SUPER_ADMIN staff, strictly enforce their assigned boutique counter (IDOR Prevention)
+    let resolvedStoreId = req.user.role === 'SUPER_ADMIN' 
+      ? (storeId || req.user.assignedStoreId) 
+      : req.user.assignedStoreId;
+
     if (!resolvedStoreId) {
       const defaultStore = await prisma.store.findFirst({
         where: { isActive: true },
@@ -122,6 +130,17 @@ export const createInvoice = async (req, res) => {
     let discountAmount = 0;
     const numDiscountValue = Number(discountValue) || 0;
 
+    // Validate billing:discount authorization for non-superadmins
+    if (numDiscountValue > 0 && discountType !== 'NONE' && req.user.role !== 'SUPER_ADMIN') {
+      const userPerms = req.user.permissions || [];
+      if (!userPerms.includes('billing:discount')) {
+        return res.status(403).json({
+          success: false,
+          message: 'Forbidden: Your account does not have permission (billing:discount) to apply manual discounts.',
+        });
+      }
+    }
+
     if (discountType === 'FIXED') {
       discountAmount = Math.min(numDiscountValue, subtotal);
     } else if (discountType === 'PERCENTAGE') {
@@ -139,12 +158,7 @@ export const createInvoice = async (req, res) => {
 
     const grandTotal = Number((taxableAmount + taxAmount).toFixed(2));
 
-    // 4. Generate Sequential Invoice Number (e.g. JJ-2026-0001)
-    const year = new Date().getFullYear();
-    const count = await prisma.invoice.count();
-    const invoiceNumber = `JJ-${year}-${String(count + 1).padStart(4, '0')}`;
-
-    // 5. Resolve Customer
+    // 4. Resolve Customer
     let resolvedCustomerId = customerId || null;
     if (!resolvedCustomerId) {
       const existingCust = await prisma.customer.findUnique({
@@ -242,191 +256,241 @@ export const createInvoice = async (req, res) => {
       dueAmount = isPaid ? 0 : grandTotal;
     }
 
-    // 6. Generate Dynamic UPI QR Code payload for this store
-    // For SPLIT payments, generate QR code strictly for the remaining UPI amount!
+    // 6. Generate Dynamic UPI QR Code payload and atomic transaction with concurrency retry loop
     const effectiveUpiAmount = paymentMethod === 'SPLIT' ? upiAmount : (paymentMethod === 'CREDIT' ? 0 : grandTotal);
     const storeUpi = store.upiId || process.env.STORE_UPI_ID || 'jjperfumes@icici';
     const storeName = store.name || 'J I PERFUME';
+    const finalNotes = [notes, splitSummary].filter(Boolean).join(' | ');
 
+    const generateNextInvoiceNumber = async () => {
+      const year = new Date().getFullYear();
+      const prefix = `JJ-${year}-`;
+      const latest = await prisma.invoice.findFirst({
+        where: { invoiceNumber: { startsWith: prefix } },
+        orderBy: { invoiceNumber: 'desc' },
+        select: { invoiceNumber: true },
+      });
+      let nextSeq = 1;
+      if (latest?.invoiceNumber) {
+        const match = latest.invoiceNumber.match(new RegExp(`^JJ-${year}-(\\d+)$`));
+        if (match) {
+          nextSeq = parseInt(match[1], 10) + 1;
+        } else {
+          const totalCount = await prisma.invoice.count();
+          nextSeq = totalCount + 1;
+        }
+      } else {
+        const totalCount = await prisma.invoice.count();
+        nextSeq = totalCount + 1;
+      }
+      return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+    };
+
+    let result = null;
+    let invoiceNumber = null;
     let upiString = null;
     let qrDataUrl = null;
 
-    if ((paymentMethod === 'UPI_QR' || (paymentMethod === 'SPLIT' && upiAmount > 0)) && effectiveUpiAmount > 0) {
-      upiString = `upi://pay?pa=${storeUpi}&pn=${encodeURIComponent(storeName)}&am=${effectiveUpiAmount}&cu=INR&tn=${encodeURIComponent('Bill ' + invoiceNumber + (paymentMethod === 'SPLIT' ? ' Bal' : ''))}`;
+    const maxAttempts = 10;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        qrDataUrl = await QRCode.toDataURL(upiString, {
-          width: 320,
-          margin: 2,
-          color: {
-            dark: '#0A47E5',
-            light: '#FFFFFF',
-          },
-        });
-      } catch (qrErr) {
-        console.warn('QR code generation warning:', qrErr);
-      }
-    }
+        invoiceNumber = await generateNextInvoiceNumber();
 
-    // 7. Execute atomic database transaction
-    const finalNotes = [notes, splitSummary].filter(Boolean).join(' | ');
+        if ((paymentMethod === 'UPI_QR' || (paymentMethod === 'SPLIT' && upiAmount > 0)) && effectiveUpiAmount > 0) {
+          upiString = `upi://pay?pa=${storeUpi}&pn=${encodeURIComponent(storeName)}&am=${effectiveUpiAmount}&cu=INR&tn=${encodeURIComponent('Bill ' + invoiceNumber + (paymentMethod === 'SPLIT' ? ' Bal' : ''))}`;
+          try {
+            qrDataUrl = await QRCode.toDataURL(upiString, {
+              width: 320,
+              margin: 2,
+              color: {
+                dark: '#0A47E5',
+                light: '#FFFFFF',
+              },
+            });
+          } catch (qrErr) {
+            console.warn('QR code generation warning:', qrErr);
+          }
+        }
 
-    const result = await prisma.$transaction(async (tx) => {
-      // Create Invoice with store relation
-      const createdInvoice = await tx.invoice.create({
-        data: {
-          invoiceNumber,
-          customerId: resolvedCustomerId,
-          cashierId: req.user.id,
-          storeId: store.id,
-          subtotal,
-          discountType,
-          discountValue: numDiscountValue,
-          discountAmount,
-          taxableAmount,
-          taxRate,
-          taxAmount,
-          cgstAmount,
-          sgstAmount,
-          grandTotal,
-          paidAmount,
-          dueAmount,
-          paymentStatus,
-          paymentMethod,
-          notes: finalNotes,
-          items: {
-            create: validatedItems.map((vi) => ({
-              productId: vi.productId,
-              productName: vi.productName,
-              sku: vi.sku,
-              volumeMl: vi.volumeMl,
-              unitPrice: vi.unitPrice,
-              quantity: vi.quantity,
-              totalAmount: vi.totalAmount,
-            })),
-          },
-        },
-        include: {
-          items: true,
-          customer: true,
-          store: { include: { city: true } },
-          cashier: { select: { id: true, name: true, email: true, role: true } },
-        },
-      });
+        result = await prisma.$transaction(async (tx) => {
+          // Create Invoice with store relation
+          const createdInvoice = await tx.invoice.create({
+            data: {
+              invoiceNumber,
+              customerId: resolvedCustomerId,
+              cashierId: req.user.id,
+              storeId: store.id,
+              subtotal,
+              discountType,
+              discountValue: numDiscountValue,
+              discountAmount,
+              taxableAmount,
+              taxRate,
+              taxAmount,
+              cgstAmount,
+              sgstAmount,
+              grandTotal,
+              paidAmount,
+              dueAmount,
+              paymentStatus,
+              paymentMethod,
+              notes: finalNotes,
+              items: {
+                create: validatedItems.map((vi) => ({
+                  productId: vi.productId,
+                  productName: vi.productName,
+                  sku: vi.sku,
+                  volumeMl: vi.volumeMl,
+                  unitPrice: vi.unitPrice,
+                  quantity: vi.quantity,
+                  totalAmount: vi.totalAmount,
+                })),
+              },
+            },
+            include: {
+              items: true,
+              customer: true,
+              store: { include: { city: true } },
+              cashier: { select: { id: true, name: true, email: true, role: true } },
+            },
+          });
 
-      // Update location-wise StockBalance & aggregate Product stock
-      for (const item of items) {
-        // Decrement store-specific stock balance
-        await tx.stockBalance.upsert({
-          where: {
-            productId_storeId: {
+          // Update location-wise StockBalance & aggregate Product stock
+          const newlyLowStockItems = [];
+          for (const item of items) {
+            // Decrement store-specific stock balance
+            const updatedBal = await tx.stockBalance.upsert({
+              where: {
+                productId_storeId: {
+                  productId: item.productId,
+                  storeId: store.id,
+                },
+              },
+              update: { quantity: { decrement: item.quantity } },
+              create: {
+                productId: item.productId,
+                storeId: store.id,
+                quantity: 0,
+              },
+            });
+
+            // Decrement aggregate product stock
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { stockQuantity: { decrement: item.quantity } },
+            });
+
+            // Concurrency-safe low stock evaluation
+            const trackRes = await evaluateStockTrackingInTx(tx, {
               productId: item.productId,
               storeId: store.id,
-            },
-          },
-          update: { quantity: { decrement: item.quantity } },
-          create: {
-            productId: item.productId,
-            storeId: store.id,
-            quantity: 0,
-          },
+              newQuantity: updatedBal.quantity,
+            });
+            if (trackRes.newlyLowStock) {
+              newlyLowStockItems.push(trackRes.item);
+            }
+
+            // Audit log
+            await tx.stockMovement.create({
+              data: {
+                productId: item.productId,
+                storeId: store.id,
+                quantityChange: -item.quantity,
+                type: 'SALE',
+                referenceId: createdInvoice.id,
+                notes: `POS Bill #${invoiceNumber} at ${store.name} (${store.city.name})`,
+                createdById: req.user.id,
+              },
+            });
+          }
+
+          // Create Payment records (supporting multi-tender split)
+          const paymentRecords = [];
+
+          if (paymentMethod === 'SPLIT' || paymentMethod === 'CREDIT') {
+            if (cashAmount > 0) {
+              const cashPay = await tx.payment.create({
+                data: {
+                  invoiceId: createdInvoice.id,
+                  amount: cashAmount,
+                  method: 'CASH',
+                  status: 'PAID',
+                  paidAt: new Date(),
+                  transactionReference: `CASH-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+                },
+              });
+              paymentRecords.push(cashPay);
+            }
+
+            if (cardAmount > 0) {
+              const cardPay = await tx.payment.create({
+                data: {
+                  invoiceId: createdInvoice.id,
+                  amount: cardAmount,
+                  method: 'CARD',
+                  status: 'PAID',
+                  paidAt: new Date(),
+                  transactionReference: `CARD-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+                },
+              });
+              paymentRecords.push(cardPay);
+            }
+
+            if (upiAmount > 0) {
+              const upiPay = await tx.payment.create({
+                data: {
+                  invoiceId: createdInvoice.id,
+                  amount: upiAmount,
+                  method: 'UPI_QR',
+                  status: 'PENDING',
+                  upiString,
+                  qrDataUrl,
+                },
+              });
+              paymentRecords.push(upiPay);
+            }
+
+            if (creditAmount > 0) {
+              const creditPay = await tx.payment.create({
+                data: {
+                  invoiceId: createdInvoice.id,
+                  amount: creditAmount,
+                  method: 'CREDIT',
+                  status: 'PENDING',
+                  transactionReference: `CREDIT-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+                },
+              });
+              paymentRecords.push(creditPay);
+            }
+          } else {
+            const singlePay = await tx.payment.create({
+              data: {
+                invoiceId: createdInvoice.id,
+                amount: grandTotal,
+                method: paymentMethod,
+                status: paymentStatus,
+                upiString: paymentMethod === 'UPI_QR' ? upiString : null,
+                qrDataUrl: paymentMethod === 'UPI_QR' ? qrDataUrl : null,
+                paidAt: isPaid ? new Date() : null,
+                transactionReference: isPaid ? `POS-${Date.now()}` : null,
+              },
+            });
+            paymentRecords.push(singlePay);
+          }
+
+          return { invoice: createdInvoice, payments: paymentRecords, newlyLowStockItems };
         });
 
-        // Decrement aggregate product stock
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stockQuantity: { decrement: item.quantity } },
-        });
-
-        // Audit log
-        await tx.stockMovement.create({
-          data: {
-            productId: item.productId,
-            storeId: store.id,
-            quantityChange: -item.quantity,
-            type: 'SALE',
-            referenceId: createdInvoice.id,
-            notes: `POS Bill #${invoiceNumber} at ${store.name} (${store.city.name})`,
-            createdById: req.user.id,
-          },
-        });
+        // Break on successful commit
+        break;
+      } catch (txErr) {
+        if ((txErr.code === 'P2002' || txErr.message?.includes('invoiceNumber')) && attempt < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 20 + Math.random() * 50));
+          continue;
+        }
+        throw txErr;
       }
-
-      // Create Payment records (supporting multi-tender split)
-      const paymentRecords = [];
-
-      if (paymentMethod === 'SPLIT' || paymentMethod === 'CREDIT') {
-        if (cashAmount > 0) {
-          const cashPay = await tx.payment.create({
-            data: {
-              invoiceId: createdInvoice.id,
-              amount: cashAmount,
-              method: 'CASH',
-              status: 'PAID',
-              paidAt: new Date(),
-              transactionReference: `CASH-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
-            },
-          });
-          paymentRecords.push(cashPay);
-        }
-
-        if (cardAmount > 0) {
-          const cardPay = await tx.payment.create({
-            data: {
-              invoiceId: createdInvoice.id,
-              amount: cardAmount,
-              method: 'CARD',
-              status: 'PAID',
-              paidAt: new Date(),
-              transactionReference: `CARD-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
-            },
-          });
-          paymentRecords.push(cardPay);
-        }
-
-        if (upiAmount > 0) {
-          const upiPay = await tx.payment.create({
-            data: {
-              invoiceId: createdInvoice.id,
-              amount: upiAmount,
-              method: 'UPI_QR',
-              status: 'PENDING',
-              upiString,
-              qrDataUrl,
-            },
-          });
-          paymentRecords.push(upiPay);
-        }
-
-        if (creditAmount > 0) {
-          const creditPay = await tx.payment.create({
-            data: {
-              invoiceId: createdInvoice.id,
-              amount: creditAmount,
-              method: 'CREDIT',
-              status: 'PENDING',
-              transactionReference: `CREDIT-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
-            },
-          });
-          paymentRecords.push(creditPay);
-        }
-      } else {
-        const singlePay = await tx.payment.create({
-          data: {
-            invoiceId: createdInvoice.id,
-            amount: grandTotal,
-            method: paymentMethod,
-            status: paymentStatus,
-            upiString: paymentMethod === 'UPI_QR' ? upiString : null,
-            qrDataUrl: paymentMethod === 'UPI_QR' ? qrDataUrl : null,
-            paidAt: isPaid ? new Date() : null,
-            transactionReference: isPaid ? `POS-${Date.now()}` : null,
-          },
-        });
-        paymentRecords.push(singlePay);
-      }
-
-      return { invoice: createdInvoice, payments: paymentRecords };
-    });
+    }
 
     const primaryPayment = result.payments.find((p) => p.status === 'PENDING') || result.payments[0];
 
@@ -451,6 +515,16 @@ export const createInvoice = async (req, res) => {
         whatsappResult = await sendWhatsAppInvoice(result.invoice);
       } catch (wsErr) {
         console.warn('WhatsApp invoice dispatch warning:', wsErr.message);
+      }
+    }
+
+    // Trigger Automatic Low Stock WhatsApp Alert for newly low-stock items
+    let lowStockAlertResult = null;
+    if (result.newlyLowStockItems && result.newlyLowStockItems.length > 0) {
+      try {
+        lowStockAlertResult = await dispatchLowStockWhatsAppNotification(result.newlyLowStockItems);
+      } catch (wsErr) {
+        console.error('[Automatic Low Stock WhatsApp Error]:', wsErr.message);
       }
     }
 
@@ -498,10 +572,15 @@ export const getInvoices = async (req, res) => {
       where.paymentMethod = paymentMethod;
     }
 
-    if (storeId && storeId !== 'ALL') {
-      where.storeId = storeId;
-    } else if (cityId && cityId !== 'ALL') {
-      where.store = { cityId };
+    // CASHIER restriction: Cashier is strictly restricted to viewing invoices of their assigned store
+    if (req.user.role === 'CASHIER' && req.user.assignedStoreId) {
+      where.storeId = req.user.assignedStoreId;
+    } else {
+      if (storeId && storeId !== 'ALL') {
+        where.storeId = storeId;
+      } else if (cityId && cityId !== 'ALL') {
+        where.store = { cityId };
+      }
     }
 
     if (search && search.trim()) {
@@ -585,6 +664,14 @@ export const getInvoiceById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Invoice not found' });
     }
 
+    // CASHIER restriction: Cannot view invoices belonging to other outlets
+    if (req.user.role === 'CASHIER' && req.user.assignedStoreId && invoice.storeId !== req.user.assignedStoreId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have permission to view invoices from another store.',
+      });
+    }
+
     return res.json({ success: true, data: invoice });
   } catch (error) {
     console.error('getInvoiceById error:', error);
@@ -606,6 +693,14 @@ export const cancelInvoice = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Invoice not found' });
     }
 
+    // CASHIER restriction: Cannot cancel invoices belonging to other outlets
+    if (req.user.role === 'CASHIER' && req.user.assignedStoreId && invoice.storeId !== req.user.assignedStoreId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have permission to cancel invoices from another store.',
+      });
+    }
+
     if (invoice.paymentStatus === 'CANCELLED') {
       return res.status(400).json({ success: false, message: 'Invoice is already cancelled' });
     }
@@ -623,7 +718,7 @@ export const cancelInvoice = async (req, res) => {
       // 2. Restore inventory to specific store balance & total aggregate
       for (const item of invoice.items) {
         if (invoice.storeId) {
-          await tx.stockBalance.upsert({
+          const restoredBal = await tx.stockBalance.upsert({
             where: {
               productId_storeId: {
                 productId: item.productId,
@@ -636,6 +731,13 @@ export const cancelInvoice = async (req, res) => {
               storeId: invoice.storeId,
               quantity: item.quantity,
             },
+          });
+
+          // Concurrency-safe check to reset lowStockAlertSent if quantity restored > 10
+          await evaluateStockTrackingInTx(tx, {
+            productId: item.productId,
+            storeId: invoice.storeId,
+            newQuantity: restoredBal.quantity,
           });
         }
 
@@ -682,6 +784,14 @@ export const collectDuePayment = async (req, res) => {
 
     if (!invoice) {
       return res.status(404).json({ success: false, message: 'Invoice not found.' });
+    }
+
+    // CASHIER restriction: Cannot collect due payment for another store's invoice
+    if (req.user.role === 'CASHIER' && req.user.assignedStoreId && invoice.storeId && invoice.storeId !== req.user.assignedStoreId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have permission to collect payments for another store.',
+      });
     }
 
     const currentDue = Number(invoice.dueAmount);
@@ -775,6 +885,14 @@ export const sendWhatsAppBill = async (req, res) => {
 
     if (!invoice) {
       return res.status(404).json({ success: false, message: 'Invoice not found.' });
+    }
+
+    // CASHIER restriction: Cannot dispatch WhatsApp bills for another store
+    if (req.user?.role === 'CASHIER' && req.user?.assignedStoreId && invoice.storeId && invoice.storeId !== req.user.assignedStoreId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have permission to send WhatsApp bills for another store.',
+      });
     }
 
     const result = await sendWhatsAppInvoice(invoice);

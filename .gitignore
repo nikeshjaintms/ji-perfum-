@@ -24,6 +24,7 @@ frontend/.env.production
 !backend/.env.production.example
 !frontend/.env.example
 
+tests/
 # Build outputs
 dist/
 build/

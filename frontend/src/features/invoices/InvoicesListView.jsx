@@ -21,8 +21,14 @@ import {
   MessageCircle
 } from 'lucide-react';
 import { billingService } from '../../services/api';
+import { hasPermission } from '../../utils/permissions';
 
-export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stores = [] }) {
+export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stores = [], currentUser = null }) {
+  const canSettleDue = hasPermission(currentUser, 'billing:settle');
+  const canCancelInvoice = hasPermission(currentUser, 'invoices:cancel');
+  const canSendWhatsApp = hasPermission(currentUser, 'invoices:whatsapp');
+  const canPrintInvoice = hasPermission(currentUser, 'invoices:print');
+
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [totalInvoices, setTotalInvoices] = useState(0);
@@ -43,6 +49,10 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
   const [collectError, setCollectError] = useState('');
 
   const fetchInvoices = useCallback(async () => {
+    if (currentUser && !hasPermission(currentUser, 'invoices:view')) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setErrorMsg('');
@@ -77,7 +87,7 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, statusFilter, selectedStoreFilter, search, sortConfig]);
+  }, [page, pageSize, statusFilter, selectedStoreFilter, search, sortConfig, currentUser]);
 
   useEffect(() => {
     fetchInvoices();
@@ -364,7 +374,7 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
 
         return (
           <div className="flex items-center justify-center space-x-1.5">
-            {hasDue && !isCancelled && (
+            {hasDue && !isCancelled && canSettleDue && (
               <button
                 id={`collect-due-btn-${inv.invoiceNumber}`}
                 onClick={(e) => { e.stopPropagation(); openCollectDueModal(inv); }}
@@ -386,7 +396,7 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
               </button>
             )}
 
-            {inv.customer?.phone && (
+            {inv.customer?.phone && canSendWhatsApp && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -405,15 +415,17 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
               </button>
             )}
 
-            <button
-              onClick={(e) => { e.stopPropagation(); onOpenPrintModal(inv); }}
-              className="p-1.5 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
-              title="Print / View Invoice"
-            >
-              <Printer className="w-3.5 h-3.5 text-slate-600" />
-            </button>
+            {canPrintInvoice && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onOpenPrintModal(inv); }}
+                className="p-1.5 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
+                title="Print / View Invoice"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-600" />
+              </button>
+            )}
 
-            {!isCancelled && (
+            {!isCancelled && canCancelInvoice && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleCancelInvoice(inv); }}
                 className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
@@ -426,7 +438,7 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
         );
       },
     },
-  ], []);
+  ], [canSettleDue, canCancelInvoice, canSendWhatsApp, canPrintInvoice]);
 
   return (
     <div className="max-w-[1700px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
@@ -440,27 +452,6 @@ export default function InvoicesListView({ onOpenQrModal, onOpenPrintModal, stor
 
         {/* Search Bar & City Selector */}
         <div className="flex items-center space-x-2 w-full sm:w-auto min-w-0">
-          {/* City / Store Filter */}
-          {stores.length > 0 && (
-            <div className="flex items-center bg-white border border-slate-200 hover:border-slate-300 rounded-full px-2.5 sm:px-3 py-1.5 text-xs text-slate-700 shadow-sm transition min-w-0 flex-1 sm:flex-initial">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 hover:bg-amber-600 mr-2" />
-              <select
-                value={selectedStoreFilter}
-                onChange={(e) => handleStoreFilterChange(e.target.value)}
-                className="bg-transparent text-slate-900 text-xs font-medium focus:outline-none cursor-pointer pr-1 truncate w-full max-w-[180px] min-[360px]:max-w-[210px] sm:max-w-xs"
-              >
-                <option value="ALL" className="bg-white text-slate-900">All Outlets</option>
-                {stores.map((st) => (
-                  <option key={st.id} value={st.id} className="bg-white text-slate-900">
-                    {st.city?.name} ({st.name})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          
-
           <button
             onClick={fetchInvoices}
             className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-full text-slate-500 hover:text-slate-900 shadow-sm transition"
