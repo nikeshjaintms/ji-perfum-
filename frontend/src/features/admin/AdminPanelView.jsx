@@ -43,6 +43,9 @@ export default function AdminPanelView({
   onStoreCreated = null,
   selectedCategoryInProducts = 'ALL',
   onSelectCategoryInProducts = null,
+  onOpenViewInvoiceModal = null,
+  onOpenDuePaymentModal = null,
+  onOpenQuickStockInModal = null,
 }) {
   return (
     <div className="max-w-[1700px] mx-auto px-3 sm:px-6 lg:px-8 py-5">
@@ -56,6 +59,9 @@ export default function AdminPanelView({
             stores={stores}
             selectedStore={selectedStore}
             onNavigateTab={onMasterChange}
+            onOpenViewInvoiceModal={onOpenViewInvoiceModal}
+            onOpenDuePaymentModal={onOpenDuePaymentModal}
+            onOpenQuickStockInModal={onOpenQuickStockInModal}
           />
         )
       )}

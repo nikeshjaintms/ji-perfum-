@@ -1,5 +1,5 @@
 import React from 'react';
-import { Receipt, Eye } from 'lucide-react';
+import { Receipt, Eye, Loader2 } from 'lucide-react';
 import { formatIndianCurrency } from './StatCard';
 
 const STATUS_BADGES = {
@@ -13,6 +13,7 @@ export default function RecentInvoicesTable({
   data = [],
   isLoading = false,
   onViewInvoice,
+  loadingInvoiceId = null,
 }) {
   if (isLoading) {
     return (
@@ -84,11 +85,16 @@ export default function RecentInvoicesTable({
                   <td className="py-2.5 pl-2 text-right">
                     <button
                       type="button"
+                      disabled={loadingInvoiceId === inv.id}
                       onClick={() => onViewInvoice && onViewInvoice(inv)}
-                      className="p-1 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded-lg transition cursor-pointer"
-                      title="Inspect Invoice"
+                      className="p-1 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded-lg transition cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                      title="Inspect & Print Invoice"
                     >
-                      <Eye className="w-3.5 h-3.5" />
+                      {loadingInvoiceId === inv.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                      ) : (
+                        <Eye className="w-3.5 h-3.5" />
+                      )}
                     </button>
                   </td>
                 </tr>

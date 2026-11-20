@@ -14,7 +14,7 @@ import {
   Printer,
   Package,
 } from 'lucide-react';
-import { dashboardService } from '../../services/api';
+import { dashboardService, billingService } from '../../services/api';
 import { hasPermission } from '../../utils/permissions';
 
 import StatCard, { formatIndianCurrency } from './components/StatCard';
@@ -31,6 +31,7 @@ import DuesTable from './components/DuesTable';
 import RecentInvoicesTable from './components/RecentInvoicesTable';
 import RecentActivityFeed from './components/RecentActivityFeed';
 import DashboardQuickActions from './components/DashboardQuickActions';
+import InvoicePrintModal from '../invoices/InvoicePrintModal';
 
 export default function DashboardView({
   currentUser,
@@ -72,6 +73,39 @@ export default function DashboardView({
   const [recentInvoices, setRecentInvoices] = useState({ data: [], loading: true, error: null });
   const [pendingDues, setPendingDues] = useState({ data: [], loading: true, error: null });
   const [recentActivity, setRecentActivity] = useState({ data: [], loading: true, error: null });
+
+  // Invoice inspection & print modal states
+  const [localActiveInvoice, setLocalActiveInvoice] = useState(null);
+  const [loadingInvoiceId, setLoadingInvoiceId] = useState(null);
+
+  const handleInspectInvoice = async (inv) => {
+    if (!inv || !inv.id) return;
+    setLoadingInvoiceId(inv.id);
+    try {
+      let fullInvoice = inv;
+      // Fetch full details if invoice doesn't have complete items array
+      if (!inv.items || !inv.items.length) {
+        const res = await billingService.getInvoiceById(inv.id);
+        if (res?.success && res?.data) {
+          fullInvoice = res.data;
+        }
+      }
+      if (onOpenViewInvoiceModal) {
+        onOpenViewInvoiceModal(fullInvoice);
+      } else {
+        setLocalActiveInvoice(fullInvoice);
+      }
+    } catch (err) {
+      console.warn('Failed to load full invoice details, displaying summary:', err);
+      if (onOpenViewInvoiceModal) {
+        onOpenViewInvoiceModal(inv);
+      } else {
+        setLocalActiveInvoice(inv);
+      }
+    } finally {
+      setLoadingInvoiceId(null);
+    }
+  };
 
   // Update query params in URL
   const updateFilters = (newRange, newStoreId) => {
@@ -604,12 +638,18 @@ export default function DashboardView({
       <RecentInvoicesTable
         data={recentInvoices.data}
         isLoading={recentInvoices.loading}
-        onViewInvoice={(inv) => {
-          if (onOpenViewInvoiceModal) {
-            onOpenViewInvoiceModal(inv);
-          }
-        }}
+        loadingInvoiceId={loadingInvoiceId}
+        onViewInvoice={handleInspectInvoice}
       />
+
+      {/* Fallback View / Print Invoice Modal if not handled by root modal */}
+      {localActiveInvoice && (
+        <InvoicePrintModal
+          invoice={localActiveInvoice}
+          mode="a4"
+          onClose={() => setLocalActiveInvoice(null)}
+        />
+      )}
     </div>
   );
 }

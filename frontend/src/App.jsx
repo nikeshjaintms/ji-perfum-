@@ -137,6 +137,7 @@ function AdminPortalRoute({
   setIsChangePasswordOpen,
   selectedCategoryInProducts,
   setSelectedCategoryInProducts,
+  onOpenViewInvoiceModal,
 }) {
   const { masterTab } = useParams();
   const navigate = useNavigate();
@@ -145,6 +146,10 @@ function AdminPortalRoute({
   const activeMaster = validMasters.includes(masterTab) ? masterTab : 'dashboard';
 
   const handleSelectMaster = (m) => {
+    if (m === 'invoices') {
+      navigate('/invoices');
+      return;
+    }
     navigate(`/admin/${m}`);
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       setIsSidebarOpen(false);
@@ -191,6 +196,7 @@ function AdminPortalRoute({
             onStoreCreated={(newStore) => refreshStores(newStore)}
             selectedCategoryInProducts={selectedCategoryInProducts}
             onSelectCategoryInProducts={setSelectedCategoryInProducts}
+            onOpenViewInvoiceModal={onOpenViewInvoiceModal}
           />
         </main>
       </div>
@@ -436,6 +442,7 @@ export default function App() {
                 setIsChangePasswordOpen={setIsChangePasswordOpen}
                 selectedCategoryInProducts={selectedCategoryInProducts}
                 setSelectedCategoryInProducts={setSelectedCategoryInProducts}
+                onOpenViewInvoiceModal={(inv) => setActivePrintDoc({ invoice: inv, mode: 'a4' })}
               />
             )
           }
