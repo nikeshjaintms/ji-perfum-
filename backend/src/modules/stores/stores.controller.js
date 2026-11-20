@@ -272,3 +272,133 @@ export const createStore = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to create store: ' + error.message });
   }
 };
+
+export const updateStore = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, address, phone, gstin, upiId, isActive, isRetailCounter } = req.body;
+
+    const existingStore = await prisma.store.findUnique({ where: { id } });
+    if (!existingStore) {
+      return res.status(404).json({ success: false, message: 'Store not found' });
+    }
+
+    const updateData = {};
+    if (name !== undefined) {
+      if (!name.trim() || name.trim().length < 3) {
+        return res.status(400).json({ success: false, message: 'Store name must be at least 3 characters.' });
+      }
+      updateData.name = name.trim();
+    }
+    if (address !== undefined) updateData.address = address?.trim() || null;
+    if (phone !== undefined) updateData.phone = phone?.trim() || null;
+    if (gstin !== undefined) updateData.gstin = gstin?.trim() || null;
+    if (upiId !== undefined) updateData.upiId = upiId?.trim() || null;
+    if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+    if (isRetailCounter !== undefined) updateData.isRetailCounter = Boolean(isRetailCounter);
+
+    const updated = await prisma.store.update({
+      where: { id },
+      data: updateData,
+      include: { city: true },
+    });
+
+    return res.json({
+      success: true,
+      data: updated,
+      message: 'Store updated successfully',
+    });
+  } catch (error) {
+    console.error('updateStore error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update store: ' + error.message });
+  }
+};
+
+export const deleteStore = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const store = await prisma.store.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { invoices: true, users: true, stockBalances: true },
+        },
+      },
+    });
+
+    if (!store) {
+      return res.status(404).json({ success: false, message: 'Store not found' });
+    }
+
+    // Check if store has active staff assigned
+    if (store._count.users > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete store '${store.name}' because ${store._count.users} staff member(s) are assigned to it. Please reassign staff first.`,
+      });
+    }
+
+    // If store has invoices, soft-delete (deactivate)
+    if (store._count.invoices > 0) {
+      await prisma.store.update({
+        where: { id },
+        data: { isActive: false },
+      });
+      return res.json({
+        success: true,
+        message: `Store '${store.name}' has historical sales invoices. It has been deactivated and archived.`,
+      });
+    }
+
+    // Otherwise clean up stock balances and delete store
+    await prisma.$transaction([
+      prisma.stockBalance.deleteMany({ where: { storeId: id } }),
+      prisma.stockMovement.deleteMany({ where: { storeId: id } }),
+      prisma.store.delete({ where: { id } }),
+    ]);
+
+    return res.json({
+      success: true,
+      message: `Store '${store.name}' deleted successfully.`,
+    });
+  } catch (error) {
+    console.error('deleteStore error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to delete store: ' + error.message });
+  }
+};
+
+export const deleteCity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const city = await prisma.city.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { stores: true },
+        },
+      },
+    });
+
+    if (!city) {
+      return res.status(404).json({ success: false, message: 'City not found' });
+    }
+
+    // Check if city has linked stores
+    if (city._count.stores > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete city '${city.name}' because ${city._count.stores} boutique store(s) are registered in it. Please reassign or delete the stores first.`,
+      });
+    }
+
+    await prisma.city.delete({ where: { id } });
+
+    return res.json({
+      success: true,
+      message: `City '${city.name}' deleted successfully.`,
+    });
+  } catch (error) {
+    console.error('deleteCity error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to delete city: ' + error.message });
+  }
+};

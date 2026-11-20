@@ -71,6 +71,21 @@ export const login = async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
+    // Query active permissions for user role
+    let permissions = [];
+    try {
+      const roleRows = await prisma.$queryRawUnsafe(
+        `SELECT permissions FROM role_permissions WHERE role_id = ?;`,
+        user.role
+      );
+      if (roleRows && roleRows.length > 0) {
+        const raw = roleRows[0].permissions;
+        permissions = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      }
+    } catch (e) {
+      permissions = [];
+    }
+
     // Set auth cookies in response
     setAuthCookies(res, token);
 
@@ -86,6 +101,7 @@ export const login = async (req, res) => {
           role: user.role,
           assignedStoreId: user.assignedStoreId,
           assignedStore: user.assignedStore,
+          permissions: Array.isArray(permissions) ? permissions : [],
         },
       },
     });

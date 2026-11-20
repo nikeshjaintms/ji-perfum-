@@ -15,8 +15,10 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { categoryService } from '../../services/api';
+import { hasPermission } from '../../utils/permissions';
 
-export default function CategoriesView({ onNavigateToProducts = null }) {
+export default function CategoriesView({ onNavigateToProducts = null, currentUser = null }) {
+  const canManageCategories = hasPermission(currentUser, 'categories:manage');
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [totalCategories, setTotalCategories] = useState(0);
@@ -41,6 +43,10 @@ export default function CategoriesView({ onNavigateToProducts = null }) {
   const [deleteError, setDeleteError] = useState('');
 
   const fetchCategories = useCallback(async () => {
+    if (currentUser && !hasPermission(currentUser, 'categories:view')) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setErrorMsg('');
@@ -71,7 +77,7 @@ export default function CategoriesView({ onNavigateToProducts = null }) {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, sortConfig]);
+  }, [page, pageSize, search, sortConfig, currentUser]);
 
   useEffect(() => {
     fetchCategories();
@@ -381,26 +387,32 @@ export default function CategoriesView({ onNavigateToProducts = null }) {
       headerClassName: 'whitespace-nowrap',
       render: (_, cat) => (
         <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap">
-          <button
-            type="button"
-            onClick={() => handleOpenEditModal(cat)}
-            className="p-1.5 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
-            title="Edit Category Details"
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleOpenDeleteModal(cat)}
-            className="p-1.5 text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition cursor-pointer"
-            title="Delete Category"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {canManageCategories ? (
+            <>
+              <button
+                type="button"
+                onClick={() => handleOpenEditModal(cat)}
+                className="p-1.5 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition cursor-pointer"
+                title="Edit Category Details"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenDeleteModal(cat)}
+                className="p-1.5 text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition cursor-pointer"
+                title="Delete Category"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </>
+          ) : (
+            <span className="text-[11px] text-slate-400 italic">View Only</span>
+          )}
         </div>
       ),
     },
-  ], [onNavigateToProducts]);
+  ], [onNavigateToProducts, canManageCategories]);
 
   return (
     <div className="max-w-[1700px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
@@ -419,14 +431,16 @@ export default function CategoriesView({ onNavigateToProducts = null }) {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAddModal}
-          id="add-category-master-btn"
-          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition shadow-sm flex items-center space-x-1.5 cursor-pointer whitespace-nowrap"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Add category</span>
-        </button>
+        {canManageCategories && (
+          <button
+            onClick={handleOpenAddModal}
+            id="add-category-master-btn"
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition shadow-sm flex items-center space-x-1.5 cursor-pointer whitespace-nowrap"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add category</span>
+          </button>
+        )}
       </div>
 
       {errorMsg && (

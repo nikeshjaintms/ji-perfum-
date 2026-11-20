@@ -147,6 +147,14 @@ export const storeService = {
     const res = await api.post('/stores', storeData);
     return res.data;
   },
+  deleteStore: async (id) => {
+    const res = await api.delete(`/stores/${id}`);
+    return res.data;
+  },
+  deleteCity: async (id) => {
+    const res = await api.delete(`/stores/cities/${id}`);
+    return res.data;
+  },
 };
 
 export const categoryService = {
@@ -207,6 +215,10 @@ export const productService = {
     const res = await api.post(`/products/${id}/adjust-stock`, payload);
     return res.data;
   },
+  deleteProduct: async (id) => {
+    const res = await api.delete(`/products/${id}`);
+    return res.data;
+  },
 };
 
 export const billingService = {
@@ -262,6 +274,100 @@ export const userService = {
   },
   deleteUser: async (id) => {
     const res = await api.delete(`/users/${id}`);
+    return res.data;
+  },
+  getRolesAndPermissions: async () => {
+    const res = await api.get('/users/roles-permissions');
+    return res.data;
+  },
+  createRole: async (roleData) => {
+    const res = await api.post('/users/roles-permissions', roleData);
+    return res.data;
+  },
+  updateRole: async (id, roleData) => {
+    const res = await api.put(`/users/roles-permissions/${id}`, roleData);
+    return res.data;
+  },
+  togglePermission: async (id, permissionKey) => {
+    const res = await api.post(`/users/roles-permissions/${id}/toggle`, { permissionKey });
+    return res.data;
+  },
+  deleteRole: async (id) => {
+    const res = await api.delete(`/users/roles-permissions/${id}`);
+    return res.data;
+  },
+  resetRole: async (id) => {
+    const res = await api.post(`/users/roles-permissions/${id}/reset`);
+    return res.data;
+  },
+  createPermission: async (data) => {
+    const res = await api.post('/users/permissions', data);
+    return res.data;
+  },
+  updatePermission: async (id, data) => {
+    const res = await api.put(`/users/permissions/${id}`, data);
+    return res.data;
+  },
+  deletePermission: async (id) => {
+    const res = await api.delete(`/users/permissions/${id}`);
+    return res.data;
+  },
+};
+
+export const dashboardService = {
+  getSummary: async (params, config = {}) => {
+    const res = await api.get('/dashboard/summary', { params, ...config });
+    return res.data;
+  },
+  getSalesTrend: async (params, config = {}) => {
+    const res = await api.get('/dashboard/sales-trend', { params, ...config });
+    return res.data;
+  },
+  getPaymentMethods: async (params, config = {}) => {
+    const res = await api.get('/dashboard/payment-methods', { params, ...config });
+    return res.data;
+  },
+  getTopProducts: async (params, config = {}) => {
+    const res = await api.get('/dashboard/top-products', { params, ...config });
+    return res.data;
+  },
+  getCategorySales: async (params, config = {}) => {
+    const res = await api.get('/dashboard/category-sales', { params, ...config });
+    return res.data;
+  },
+  getStorePerformance: async (params, config = {}) => {
+    const res = await api.get('/dashboard/store-performance', { params, ...config });
+    return res.data;
+  },
+  getStaffPerformance: async (params, config = {}) => {
+    const res = await api.get('/dashboard/staff-performance', { params, ...config });
+    return res.data;
+  },
+  getLowStock: async (params, config = {}) => {
+    const res = await api.get('/dashboard/low-stock', { params, ...config });
+    return res.data;
+  },
+  getInventoryValue: async (params, config = {}) => {
+    const res = await api.get('/dashboard/inventory-value', { params, ...config });
+    return res.data;
+  },
+  getRecentInvoices: async (params, config = {}) => {
+    const res = await api.get('/dashboard/recent-invoices', { params, ...config });
+    return res.data;
+  },
+  getPendingDues: async (params, config = {}) => {
+    const res = await api.get('/dashboard/pending-dues', { params, ...config });
+    return res.data;
+  },
+  getRecentActivity: async (params, config = {}) => {
+    const res = await api.get('/dashboard/recent-activity', { params, ...config });
+    return res.data;
+  },
+  exportReport: async (params) => {
+    const res = await api.get('/dashboard/export', {
+      params,
+      responseType: 'blob',
+    });
     return res.data;
   },
 };

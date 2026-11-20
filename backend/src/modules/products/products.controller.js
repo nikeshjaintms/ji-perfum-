@@ -1,4 +1,8 @@
 import { prisma } from '../../config/prisma.js';
+import {
+  evaluateStockTrackingInTx,
+  dispatchLowStockWhatsAppNotification,
+} from '../../services/lowStock.service.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -24,7 +28,19 @@ export const getProducts = async (req, res) => {
     }
 
     if (categoryId && categoryId !== 'ALL') {
-      where.categoryId = categoryId;
+      if (Array.isArray(categoryId)) {
+        const validIds = categoryId.filter((c) => c && c !== 'ALL');
+        if (validIds.length > 0) {
+          where.categoryId = { in: validIds };
+        }
+      } else if (typeof categoryId === 'string' && categoryId.includes(',')) {
+        const catIds = categoryId.split(',').map((c) => c.trim()).filter((c) => c && c !== 'ALL');
+        if (catIds.length > 0) {
+          where.categoryId = { in: catIds };
+        }
+      } else {
+        where.categoryId = categoryId;
+      }
     }
 
     if (concentration && concentration !== 'ALL') {
@@ -273,6 +289,7 @@ export const createProduct = async (req, res) => {
       });
 
       // Create stock balance for each active store
+      const newlyLowStockItems = [];
       let calculatedTotal = 0;
       for (const st of stores) {
         const storeQty = storeStocks && storeStocks[st.id] !== undefined
@@ -285,8 +302,18 @@ export const createProduct = async (req, res) => {
             storeId: st.id,
             quantity: storeQty,
             reorderLevel: Number(reorderLevel) || 5,
+            lowStockAlertSent: false,
           },
         });
+
+        const trackRes = await evaluateStockTrackingInTx(tx, {
+          productId: created.id,
+          storeId: st.id,
+          newQuantity: storeQty,
+        });
+        if (trackRes.newlyLowStock) {
+          newlyLowStockItems.push(trackRes.item);
+        }
       }
 
       // Keep aggregate stockQuantity in sync with the sum of store balances
@@ -295,11 +322,20 @@ export const createProduct = async (req, res) => {
         data: { stockQuantity: calculatedTotal },
       });
 
-      return updatedCreated;
+      return { product: updatedCreated, newlyLowStockItems };
     });
 
+    // Dispatch WhatsApp alert for newly low-stock items after successful transaction commit
+    if (product.newlyLowStockItems && product.newlyLowStockItems.length > 0) {
+      try {
+        await dispatchLowStockWhatsAppNotification(product.newlyLowStockItems);
+      } catch (wsErr) {
+        console.error('[Automatic Low Stock WhatsApp Error]:', wsErr.message);
+      }
+    }
+
     const fullProduct = await prisma.product.findUnique({
-      where: { id: product.id },
+      where: { id: product.product.id },
       include: {
         category: true,
         stockBalances: { include: { store: { include: { city: true } } } },
@@ -343,6 +379,8 @@ export const updateProduct = async (req, res) => {
     if (data.categoryId) updatePayload.categoryId = data.categoryId;
 
     const updated = await prisma.$transaction(async (tx) => {
+      const newlyLowStockItems = [];
+
       // If store-specific stock is passed
       if (data.storeStocks && typeof data.storeStocks === 'object') {
         let total = 0;
@@ -356,11 +394,21 @@ export const updateProduct = async (req, res) => {
             update: { quantity: numQty },
             create: { productId: id, storeId: sId, quantity: numQty },
           });
+
+          // Concurrency-safe low-stock tracking per product & store
+          const trackRes = await evaluateStockTrackingInTx(tx, {
+            productId: id,
+            storeId: sId,
+            newQuantity: numQty,
+          });
+          if (trackRes.newlyLowStock) {
+            newlyLowStockItems.push(trackRes.item);
+          }
         }
         updatePayload.stockQuantity = total;
       }
 
-      return tx.product.update({
+      const updatedProd = await tx.product.update({
         where: { id },
         data: updatePayload,
         include: {
@@ -368,12 +416,23 @@ export const updateProduct = async (req, res) => {
           stockBalances: { include: { store: { include: { city: true } } } },
         },
       });
+
+      return { updatedProd, newlyLowStockItems };
     });
+
+    // Dispatch WhatsApp alert for newly low-stock items after successful transaction commit
+    if (updated.newlyLowStockItems && updated.newlyLowStockItems.length > 0) {
+      try {
+        await dispatchLowStockWhatsAppNotification(updated.newlyLowStockItems);
+      } catch (wsErr) {
+        console.error('[Automatic Low Stock WhatsApp Error]:', wsErr.message);
+      }
+    }
 
     return res.json({
       success: true,
       message: 'Product updated successfully',
-      data: updated,
+      data: updated.updatedProd,
     });
   } catch (error) {
     console.error('updateProduct error:', error);
@@ -615,6 +674,51 @@ export const deleteCategory = async (req, res) => {
   }
 };
 
+export const deleteProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { invoiceItems: true },
+        },
+      },
+    });
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    // If product has historical invoices, soft-delete by deactivating
+    if (product._count.invoiceItems > 0) {
+      await prisma.product.update({
+        where: { id },
+        data: { isActive: false },
+      });
+      return res.json({
+        success: true,
+        message: `Product '${product.name}' is referenced in ${product._count.invoiceItems} past invoice(s). It has been archived and removed from active sales catalog.`,
+      });
+    }
+
+    // Otherwise permanently clean up balances, movements and delete product
+    await prisma.$transaction([
+      prisma.stockBalance.deleteMany({ where: { productId: id } }),
+      prisma.stockMovement.deleteMany({ where: { productId: id } }),
+      prisma.product.delete({ where: { id } }),
+    ]);
+
+    return res.json({
+      success: true,
+      message: `Product '${product.name}' permanently deleted successfully.`,
+    });
+  } catch (error) {
+    console.error('deleteProduct error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to delete product: ' + error.message });
+  }
+};
+
 export const adjustStock = async (req, res) => {
   try {
     const { id } = req.params;
@@ -675,13 +779,32 @@ export const adjustStock = async (req, res) => {
         },
       });
 
-      return updatedProd;
+      // Concurrency-safe low stock evaluation
+      const trackRes = await evaluateStockTrackingInTx(tx, {
+        productId: id,
+        storeId,
+        newQuantity: newQty,
+      });
+
+      return {
+        updatedProd,
+        newlyLowStockItems: trackRes.newlyLowStock ? [trackRes.item] : [],
+      };
     });
+
+    // Dispatch WhatsApp alert if product newly reached <= threshold
+    if (updated.newlyLowStockItems && updated.newlyLowStockItems.length > 0) {
+      try {
+        await dispatchLowStockWhatsAppNotification(updated.newlyLowStockItems);
+      } catch (wsErr) {
+        console.error('[Automatic Low Stock WhatsApp Error]:', wsErr.message);
+      }
+    }
 
     return res.json({
       success: true,
       message: `Stock successfully updated (${change >= 0 ? '+' : ''}${change} units)`,
-      data: updated,
+      data: updated.updatedProd,
     });
   } catch (error) {
     console.error('adjustStock error:', error);

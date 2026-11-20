@@ -358,3 +358,122 @@ export const deleteUser = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message || 'Failed to delete user' });
   }
 };
+
+import * as rolesService from './roles.service.js';
+
+/**
+ * Roles & Permissions Master CRUD Controllers
+ */
+export const getRolesAndPermissions = async (req, res) => {
+  try {
+    const data = await rolesService.getAllRoles();
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error('getRolesAndPermissions error:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Failed to fetch roles and permissions' });
+  }
+};
+
+export const createRole = async (req, res) => {
+  try {
+    const { roleId, name, description, badgeColor, permissions } = req.body;
+    if (!name) {
+      return res.status(400).json({ success: false, message: 'Role name is required' });
+    }
+    const created = await rolesService.createCustomRole({
+      roleId,
+      name,
+      description,
+      badgeColor,
+      permissions: Array.isArray(permissions) ? permissions : [],
+    });
+    return res.status(201).json({ success: true, message: 'Role created successfully', data: created });
+  } catch (error) {
+    console.error('createRole error:', error);
+    return res.status(400).json({ success: false, message: error.message || 'Failed to create role' });
+  }
+};
+
+export const updateRole = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, badgeColor, permissions } = req.body;
+    const updated = await rolesService.updateRoleDetails(id, { name, description, badgeColor, permissions });
+    return res.json({ success: true, message: 'Role updated successfully', data: updated });
+  } catch (error) {
+    console.error('updateRole error:', error);
+    return res.status(400).json({ success: false, message: error.message || 'Failed to update role' });
+  }
+};
+
+export const toggleRolePermission = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { permissionKey } = req.body;
+    if (!permissionKey) {
+      return res.status(400).json({ success: false, message: 'Permission key is required' });
+    }
+    const result = await rolesService.toggleSinglePermission(id, permissionKey);
+    return res.json({ success: true, message: 'Permission updated', data: result });
+  } catch (error) {
+    console.error('toggleRolePermission error:', error);
+    return res.status(400).json({ success: false, message: error.message || 'Failed to toggle permission' });
+  }
+};
+
+export const deleteRole = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await rolesService.deleteCustomRole(id);
+    return res.json(result);
+  } catch (error) {
+    console.error('deleteRole error:', error);
+    return res.status(400).json({ success: false, message: error.message || 'Failed to delete role' });
+  }
+};
+
+export const resetRole = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await rolesService.resetSystemRoleToDefault(id);
+    return res.json({ success: true, message: `Role ${id} permissions reset to defaults`, data: result });
+  } catch (error) {
+    console.error('resetRole error:', error);
+    return res.status(400).json({ success: false, message: error.message || 'Failed to reset role' });
+  }
+};
+
+/**
+ * Granular Permission CRUD Controllers
+ */
+export const createPermission = async (req, res) => {
+  try {
+    const perm = await rolesService.createPermission(req.body);
+    return res.status(201).json({ success: true, message: 'Permission created successfully', data: perm });
+  } catch (error) {
+    console.error('createPermission error:', error);
+    return res.status(400).json({ success: false, message: error.message || 'Failed to create permission' });
+  }
+};
+
+export const updatePermission = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const perm = await rolesService.updatePermission(id, req.body);
+    return res.json({ success: true, message: 'Permission updated successfully', data: perm });
+  } catch (error) {
+    console.error('updatePermission error:', error);
+    return res.status(400).json({ success: false, message: error.message || 'Failed to update permission' });
+  }
+};
+
+export const deletePermission = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await rolesService.deletePermission(id);
+    return res.json(result);
+  } catch (error) {
+    console.error('deletePermission error:', error);
+    return res.status(400).json({ success: false, message: error.message || 'Failed to delete permission' });
+  }
+};

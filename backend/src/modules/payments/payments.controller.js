@@ -8,21 +8,21 @@ export const getInvoicePaymentDetails = async (req, res) => {
 
     const invoice = await prisma.invoice.findUnique({
       where: { id: invoiceId },
-      include: { payments: true },
+      include: { payments: true, store: true },
     });
 
     if (!invoice) {
       return res.status(404).json({ success: false, message: 'Invoice not found' });
     }
 
-    const upiId = process.env.STORE_UPI_ID || 'jjperfumes@icici';
-    const storeName = process.env.STORE_NAME || 'JJ PERFUME';
+    const upiId = invoice.store?.upiId || process.env.STORE_UPI_ID || 'jjperfumes@icici';
+    const storeName = invoice.store?.name || process.env.STORE_NAME || 'J I PERFUME';
     
     // Find pending payment amount (for split payments)
     const pendingPayment = invoice.payments.find((p) => p.status === 'PENDING') || invoice.payments[0];
     const amountToPay = pendingPayment ? Number(pendingPayment.amount) : Number(invoice.grandTotal);
 
-    const upiString = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(storeName)}&am=${amountToPay}&cu=INR&tn=${encodeURIComponent('JJ Perfume Inv ' + invoice.invoiceNumber + (invoice.paymentMethod === 'SPLIT' ? ' Bal' : ''))}`;
+    const upiString = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(storeName)}&am=${amountToPay}&cu=INR&tn=${encodeURIComponent('J I Perfume Inv ' + invoice.invoiceNumber + (invoice.paymentMethod === 'SPLIT' ? ' Bal' : ''))}`;
 
     const qrDataUrl = await QRCode.toDataURL(upiString, {
       width: 320,
@@ -153,8 +153,11 @@ export const confirmPayment = async (req, res) => {
     if (updatedInvoice) {
       try {
         whatsappResult = await sendWhatsAppInvoice(updatedInvoice);
+        if (!whatsappResult?.success) {
+          console.error(`\x1b[31m[Payment Confirmed but WhatsApp Failed]\x1b[0m ${whatsappResult?.message}`);
+        }
       } catch (wsErr) {
-        console.warn('WhatsApp invoice dispatch error:', wsErr.message);
+        console.error('\x1b[31m[WhatsApp invoice dispatch exception]:\x1b[0m', wsErr.message);
       }
     }
 
