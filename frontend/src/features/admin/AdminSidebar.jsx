@@ -1,6 +1,8 @@
 import React from 'react';
 import { 
   LayoutDashboard,
+  Boxes,
+  Truck,
   Sparkles, 
   FolderTree, 
   Building2, 
@@ -33,6 +35,14 @@ export const ADMIN_MASTERS_LIST = [
     desc: 'Revenue, trends & inventory KPIs',
     icon: LayoutDashboard,
     requiredPermission: 'dashboard:view',
+  },
+  { 
+    id: 'inward', 
+    label: 'Stock Inward & Distribution', 
+    shortLabel: 'Inward & Dist.',
+    desc: 'Distillery intake & location allocation',
+    icon: Boxes,
+    requiredPermission: 'inward:view',
   },
   { 
     id: 'products', 
@@ -81,6 +91,9 @@ export const hasMasterAccess = (user, master) => {
   if (user.role === 'SUPER_ADMIN') return true;
   if (master.id === 'dashboard') {
     return hasPermission(user, 'dashboard:view');
+  }
+  if (master.id === 'inward') {
+    return hasPermission(user, 'inward:view') || hasPermission(user, 'products:view');
   }
   if (master.id === 'categories') {
     return hasPermission(user, 'categories:view') || hasPermission(user, 'categories:manage');

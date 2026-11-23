@@ -198,6 +198,10 @@ export const createRazorpayOrder = async (req, res) => {
     const amountToPay = Number(invoice.dueAmount || invoice.grandTotal);
     const amountInPaise = Math.round(amountToPay * 100);
 
+    if (!razorpayInstance) {
+      return res.status(503).json({ success: false, message: 'Razorpay payment gateway is not configured in environment variables.' });
+    }
+
     const options = {
       amount: amountInPaise,
       currency: 'INR',

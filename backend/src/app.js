@@ -12,6 +12,7 @@ import billingRoutes from './modules/billing/billing.routes.js';
 import paymentsRoutes from './modules/payments/payments.routes.js';
 import storesRoutes from './modules/stores/stores.routes.js';
 import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
+import inwardRoutes from './modules/inward/inward.routes.js';
 import { prisma } from './config/prisma.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -79,6 +80,7 @@ app.use('/api/v1/billing', billingRoutes);
 app.use('/api/v1/payments', paymentsRoutes);
 app.use('/api/v1/stores', storesRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
+app.use('/api/v1/inward', inwardRoutes);
 
 // Centralized 404 handler
 app.use((req, res) => {

@@ -261,10 +261,20 @@ erDiagram
   - Retains **100% original full-fidelity resolution** (no canvas downscaling or blur) for crystal-clear bottle and box presentation.
 - Quick Stock In modal for receipt of fresh batches without navigating away from the master.
 
-### 5.6 Store-Wise Stock Management
+### 5.6 Store-Wise Stock Management & Stock Inward Workflow
 - **Store-Wise Isolation:** Replaces ambiguous "city-wise" allocations with explicit store outlet balances (`Store.id` and `Store.name`).
 - Products display independent stock counts for every physical outlet (e.g., *Mandvi Heritage Boutique: 72*, *Ahmedabad Flagship: 20*).
 - Initial stock allocation in the Add/Edit Product modal assigns inventory directly to selected store IDs with real-time aggregate calculation.
+
+#### 5.6.1 Stock Inward & Multi-Location Distribution Module (`/admin/inward`)
+- **Supply Chain Intake Workflow:** Goods arriving from distilleries, suppliers, or central production are **inwarded first** into the **Central Inward Vault** before retail distribution.
+- **Goods Receipt Note (GRN):** Records sequential Inward Consignments (`INW-YYYY-XXXX`) tracking Supplier/Distillery, Delivery Challan / Invoice Ref, Date, and Line Items (Batch #, Inward Quantity, Unit Cost, Total Cost).
+- **Central Unallocated Inventory:** Inwarded stock increases `product.unallocatedStock` without prematurely inflating retail store shelves.
+- **Multi-Location Distribution (`DST-YYYY-XXXX`):**
+  - Managers allocate available inward units across active boutique retail outlets.
+  - Validates that allocated units do not exceed available consignment balances.
+  - Atomically increments each destination store's `StockBalance`, decrements `product.unallocatedStock`, increments store aggregate `stockQuantity`, updates inward status (`PARTIALLY_DISTRIBUTED` or `FULLY_DISTRIBUTED`), and logs `StockMovement` (type `TRANSFER`).
+- **Complete Audit History:** Live log of all inward consignments, pending allocations, and location transfer dispatch slips.
 
 ### 5.7 Category Master (Olfactive Taxonomy)
 - Structured classification of perfumes into olfactory families: *Floral & Rose, Woody & Amber, Oriental & Oud, Fresh & Aquatic, Gourmand & Vanilla*.

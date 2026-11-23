@@ -380,4 +380,31 @@ export const dashboardService = {
   },
 };
 
+export const inwardService = {
+  getInwards: async (params) => {
+    const res = await api.get('/inward', { params });
+    return res.data;
+  },
+  getInwardById: async (id) => {
+    const res = await api.get(`/inward/${id}`);
+    return res.data;
+  },
+  createInward: async (inwardData) => {
+    const res = await api.post('/inward', inwardData);
+    return res.data;
+  },
+  distributeStock: async (id, distributionPayload) => {
+    const res = await api.post(`/inward/${id}/distribute`, distributionPayload);
+    return res.data;
+  },
+  getDistributions: async (params) => {
+    const res = await api.get('/inward/distributions', { params });
+    return res.data;
+  },
+  getInwardSummary: async () => {
+    const res = await api.get('/inward/summary');
+    return res.data;
+  },
+};
+
 export default api;

@@ -1,5 +1,6 @@
 import React from 'react';
 import DashboardView from '../dashboard/DashboardView';
+import StockInwardView from '../inward/StockInwardView';
 import ProductsView from '../products/ProductsView';
 import CategoriesView from '../categories/CategoriesView';
 import OutletsView from '../outlets/OutletsView';
@@ -10,6 +11,7 @@ import { Lock } from 'lucide-react';
 
 export const ADMIN_MASTERS = [
   { id: 'dashboard', label: 'Executive Dashboard', requiredPermission: 'dashboard:view' },
+  { id: 'inward', label: 'Stock Inward & Distribution', requiredPermission: 'inward:view' },
   { id: 'products', label: 'Products Master', requiredPermission: 'products:view' },
   { id: 'categories', label: 'Category Master', requiredPermission: 'categories:view' },
   { id: 'outlets', label: 'Outlet & Store Master', requiredPermission: 'stores:view' },
@@ -66,6 +68,18 @@ export default function AdminPanelView({
         )
       )}
 
+      {activeMaster === 'inward' && (
+        (!hasPermission(currentUser, 'inward:view') && !hasPermission(currentUser, 'products:view')) ? (
+          <PermissionDeniedNotice masterName="Stock Inward & Distribution" requiredPermission="inward:view" />
+        ) : (
+          <StockInwardView
+            currentUser={currentUser}
+            stores={stores}
+            onNavigateToProducts={() => onMasterChange && onMasterChange('products')}
+          />
+        )
+      )}
+
       {activeMaster === 'products' && (
         !hasPermission(currentUser, 'products:view') ? (
           <PermissionDeniedNotice masterName="Products Master" requiredPermission="products:view" />
@@ -77,6 +91,7 @@ export default function AdminPanelView({
             activeCategoryId={selectedCategoryInProducts}
             onSelectCategoryId={onSelectCategoryInProducts}
             onNavigateToCategoryMaster={() => onMasterChange && onMasterChange('categories')}
+            onNavigateToInward={() => onMasterChange && onMasterChange('inward')}
           />
         )
       )}

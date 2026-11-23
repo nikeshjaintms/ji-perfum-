@@ -16,6 +16,8 @@ import {Package,
   Store,
   LayoutGrid,
   List,
+  Boxes,
+  ArrowDownToLine,
   Image as ImageIcon,
   Upload,
   Trash2,
@@ -37,6 +39,7 @@ export default function ProductsView({
   activeCategoryId = null,
   onSelectCategoryId = null,
   onNavigateToCategoryMaster = null,
+  onNavigateToInward = null,
 }) {
   const canCreateProduct = hasPermission(currentUser, 'products:create');
   const canEditProduct = hasPermission(currentUser, 'products:edit');
@@ -575,7 +578,16 @@ export default function ProductsView({
       className: 'whitespace-nowrap',
       headerClassName: 'whitespace-nowrap',
       render: (_, prod) => (
-        <div className="flex flex-wrap gap-1.5 whitespace-nowrap">
+        <div className="flex flex-wrap items-center gap-1.5 whitespace-nowrap">
+          {prod.unallocatedStock > 0 && (
+            <span
+              title="Central Inward Vault - Awaiting Location Distribution"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] tabular-nums border border-amber-300 bg-amber-50 text-amber-900 font-bold whitespace-nowrap"
+            >
+              <Boxes className="w-3 h-3 text-amber-700" />
+              <span>Vault: {prod.unallocatedStock}</span>
+            </span>
+          )}
           {prod.stockBalances && prod.stockBalances.length > 0 ? (
             prod.stockBalances.map((bal) => {
               const q = bal.quantity;
@@ -768,6 +780,18 @@ export default function ProductsView({
             </button>
           </div>
 
+          {/* Stock Inward & Distribution Navigation Button */}
+          {onNavigateToInward && (
+            <button
+              type="button"
+              onClick={onNavigateToInward}
+              className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 border border-amber-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs whitespace-nowrap"
+            >
+              <Boxes className="w-3.5 h-3.5 text-amber-700" />
+              <span>Inward & Dist.</span>
+            </button>
+          )}
+
           {/* Quick Stock In Button */}
           {canManageStock && (
             <button
@@ -930,6 +954,16 @@ export default function ProductsView({
                               <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1 pt-1 border-t border-slate-200/50 font-mono">
                                 <span>Total in chain:</span>
                                 <span className="font-medium text-slate-600">{prod.stockQuantity} units</span>
+                              </div>
+                            )}
+
+                            {prod.unallocatedStock > 0 && (
+                              <div className="flex items-center justify-between text-[10px] text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80 font-mono mt-1">
+                                <span className="flex items-center gap-1">
+                                  <Boxes className="w-3 h-3 text-amber-700" />
+                                  <span>Inward Vault:</span>
+                                </span>
+                                <span className="font-bold text-amber-950">{prod.unallocatedStock} units</span>
                               </div>
                             )}
                         

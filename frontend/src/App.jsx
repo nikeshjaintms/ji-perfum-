@@ -23,6 +23,7 @@ import { hasPermission, hasAnyPermission } from './utils/permissions';
 // Helper to determine the first accessible admin master for a user
 export function getFirstAllowedAdminTab(user) {
   if (hasPermission(user, 'dashboard:view')) return 'dashboard';
+  if (hasPermission(user, 'inward:view')) return 'inward';
   if (hasPermission(user, 'products:view')) return 'products';
   if (hasPermission(user, 'categories:view')) return 'categories';
   if (hasPermission(user, 'stores:view')) return 'outlets';
@@ -142,7 +143,7 @@ function AdminPortalRoute({
   const { masterTab } = useParams();
   const navigate = useNavigate();
 
-  const validMasters = ['dashboard', 'products', 'categories', 'outlets', 'users', 'roles'];
+  const validMasters = ['dashboard', 'inward', 'products', 'categories', 'outlets', 'users', 'roles'];
   const activeMaster = validMasters.includes(masterTab) ? masterTab : 'dashboard';
 
   const handleSelectMaster = (m) => {

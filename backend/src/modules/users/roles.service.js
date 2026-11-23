@@ -47,6 +47,16 @@ export const DEFAULT_MODULES = [
     ],
   },
   {
+    id: 'inward',
+    name: 'Stock Inward & Distribution',
+    description: 'Central distillery goods receipt, inward batches, and multi-location boutique distribution',
+    permissions: [
+      { key: 'inward:view', name: 'View Stock Inward', description: 'Inspect inward receipts and distribution consignments' },
+      { key: 'inward:create', name: 'Create Stock Inward', description: 'Receive new stock shipments from distillery/supplier into central inventory' },
+      { key: 'inward:distribute', name: 'Distribute to Locations', description: 'Allocate and dispatch inwarded stock across boutique outlets' },
+    ],
+  },
+  {
     id: 'categories',
     name: 'Category Master',
     description: 'Fragrance scent families, olfactory classifications, and category hierarchy',
@@ -96,6 +106,7 @@ export const SYSTEM_DEFAULT_ROLES = [
       'billing:create', 'billing:discount', 'billing:settle',
       'invoices:view', 'invoices:cancel', 'invoices:whatsapp', 'invoices:print',
       'products:view', 'products:create', 'products:edit', 'products:delete', 'products:stock',
+      'inward:view', 'inward:create', 'inward:distribute',
       'categories:view', 'categories:manage',
       'stores:view', 'stores:manage',
       'users:view', 'users:manage',
@@ -113,6 +124,7 @@ export const SYSTEM_DEFAULT_ROLES = [
       'billing:create', 'billing:discount', 'billing:settle',
       'invoices:view', 'invoices:cancel', 'invoices:whatsapp', 'invoices:print',
       'products:view', 'products:create', 'products:edit', 'products:stock',
+      'inward:view', 'inward:create', 'inward:distribute',
       'categories:view',
       'stores:view',
       'users:view',
